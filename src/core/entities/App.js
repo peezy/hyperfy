@@ -457,6 +457,11 @@ export class App extends Entity {
         const player = world.entities.getPlayer(playerId || world.entities.player?.data.id)
         return player?.getProxy()
       },
+      registerCommand(cmd, fn, isAdmin) {
+        if(world.isClient) return;
+        world.chat.commands.set(cmd, { fn, isAdmin })
+        console.log(`registered command ${cmd} isAdmin ${isAdmin}`)
+      },
     }
   }
 
@@ -489,6 +494,12 @@ export class App extends Entity {
         // NOTE: on the client ignoreSocketId is a no-op because it can only send events to the server
         const event = [entity.data.id, entity.blueprint.version, name, data]
         world.network.send('entityEvent', event, ignoreSocketId)
+      },
+      sendTo(nid, name, data) {
+        if (world.isClient) return // client cant send events to other clients, unless...?
+        
+        const event = [entity.data.id, entity.blueprint.version, name, data]
+        world.network.sendTo(nid, 'entityEvent', event)
       },
       get(id) {
         const node = entity.root.get(id)
