@@ -486,6 +486,12 @@ export class App extends Entity {
       off(name, callback) {
         entity.off(name, callback)
       },
+      /**
+       * Send event to server
+       * @param {string} name - Event name
+       * @param {any} data - Payload data
+       * @param {int} ignoreSocketId - if on server, ignores networkId for this event sent
+       */
       send(name, data, ignoreSocketId) {
         if (internalEvents.includes(name)) {
           return console.error(`apps cannot send internal events (${name})`)

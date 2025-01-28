@@ -12,6 +12,8 @@ const buildDir = path.join(rootDir, 'build')
 
 await fs.emptyDir(buildDir)
 
+await import('./scripts/extract-proxy-types.js')
+
 /**
  * Build Client
  */
@@ -20,6 +22,8 @@ const clientPublicDir = path.join(rootDir, 'src/client/public')
 const clientBuildDir = path.join(rootDir, 'build/public')
 const clientHtmlSrc = path.join(rootDir, 'src/client/public/index.html')
 const clientHtmlDest = path.join(rootDir, 'build/public/index.html')
+
+
 
 {
   const clientCtx = await esbuild.context({
