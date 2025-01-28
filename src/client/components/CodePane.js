@@ -35,70 +35,189 @@ export function CodePane({ entity, onClose }) {
     world.network.send('blueprintModified', { id: blueprint.id, version, script: url })
   }
   usePane('code', paneRef, headRef, true)
-  useEffect(() => {
-    let dead
-    load().then(async monaco => {
-      if (dead) return
-      codeRef.current = entity.script?.code || '// ...'
-      const container = containerRef.current
-      const editor = monaco.editor.create(container, {
-        value: codeRef.current,
-        language: 'javascript',
-        scrollBeyondLastLine: true,
-        lineNumbers: 'on',
-        minimap: {
-          enabled: false,
-        },
-        automaticLayout: true,
-        tabSize: 2,
-        insertSpaces: true,
-      })
-
-      // Load generated suggestions
-      const response = await fetch('/suggestions.json')
-      const apiSuggestions = await response.json()
-
-      // Register completion provider
-      monaco.languages.registerCompletionItemProvider('javascript', {
-        triggerCharacters: ['.'],
-        provideCompletionItems: (model, position) => {
-          const textUntilPosition = model.getValueInRange({
-            startLineNumber: position.lineNumber,
-            startColumn: 1,
-            endLineNumber: position.lineNumber,
-            endColumn: position.column,
-          })
-
-          const match = textUntilPosition.match(/(app\.world)?\.$/)
-          if (match) {
-            return {
-              suggestions: match[1]
-                ? apiSuggestions.filter(s => s.documentation.startsWith('world.'))
-                : apiSuggestions.filter(s => s.documentation.startsWith('app.')),
-            }
-          }
-
-          return { suggestions: [] }
-        },
-      })
-      editor.onDidChangeModelContent(event => {
-        codeRef.current = editor.getValue()
-      })
-
-      editor.addAction({
-        id: 'save',
-        label: 'Save',
-        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
-        run: save,
-      })
-
-      setEditor(editor)
+useEffect(() => {
+  let dead
+  load().then(async monaco => {
+    if (dead) return
+    codeRef.current = entity.script?.code || '// ...'
+    const container = containerRef.current
+    const editor = monaco.editor.create(container, {
+      value: codeRef.current,
+      language: 'javascript',
+      scrollBeyondLastLine: true,
+      lineNumbers: 'on',
+      minimap: {
+        enabled: false,
+      },
+      automaticLayout: true,
+      tabSize: 2,
+      insertSpaces: true,
+      quickSuggestions: true,
+      parameterHints: {
+        enabled: true,
+      },
+      hover: {
+        enabled: true,
+      },
     })
 
-    return () => {
-      dead = true
-    }
-  }, [])
+    // Load generated suggestions
+    const response = await fetch('/suggestions.json')
+    const apiSuggestions = await response.json()
+
+    // Register completion provider
+    monaco.languages.registerCompletionItemProvider('javascript', {
+      triggerCharacters: ['.'],
+      provideCompletionItems: (model, position) => {
+        const textUntilPosition = model.getValueInRange({
+          startLineNumber: position.lineNumber,
+          startColumn: 1,
+          endLineNumber: position.lineNumber,
+          endColumn: position.column,
+        })
+
+        const match = textUntilPosition.match(/(app|world)\.(\w*)$/)
+        if (match) {
+          const [, prefix, partial] = match // prefix will be "app" or "world", partial will be the partial method name
+          const suggestions = apiSuggestions
+            .filter(s => s.detail.toLowerCase().startsWith(`${prefix}`))
+            .filter(s => !partial || s.label.toLowerCase().startsWith(partial.toLowerCase()))
+            .map(s => ({
+              ...s,
+              // Enhanced documentation formatting for completion items
+              documentation: {
+                value: typeof s.documentation === 'string' ? 
+                  s.documentation : 
+                  s.documentation.value,
+                isTrusted: true,
+                supportThemeIcons: true
+              },
+              // Add markdown documentation preview
+              detail: s.detail,
+              // For methods, show signature in detail
+              description: s.kind === 1 ? `(${s.insertText.split('(')[1]}` : undefined
+            }))
+
+          return {
+            suggestions,
+            incomplete: false
+          }
+        }
+
+        return { suggestions: [] }
+      },
+    })
+
+    // Register hover provider
+    monaco.languages.registerHoverProvider('javascript', {
+      provideHover: (model, position) => {
+        const word = model.getWordAtPosition(position)
+        if (!word) return null
+
+        // Get the full line text to check context
+        const lineContent = model.getLineContent(position.lineNumber)
+        const beforeWord = lineContent.substring(0, word.startColumn - 1)
+        
+        // Check if we're hovering over a property/method of app or world
+        const contextMatch = beforeWord.match(/(app|world)\.$/)
+        if (!contextMatch) return null
+
+        const prefix = contextMatch[1]
+        const suggestion = apiSuggestions.find(s => 
+          s.label === word.word && 
+          s.detail.toLowerCase().startsWith(prefix)
+        )
+
+        if (suggestion) {
+          return {
+            contents: [
+              { value: `**${suggestion.detail}**` },
+              { value: typeof suggestion.documentation === 'string' ? 
+                suggestion.documentation : 
+                suggestion.documentation.value 
+              }
+            ]
+          }
+        }
+
+        return null
+      }
+    })
+
+    // Register signature help provider for methods
+    monaco.languages.registerSignatureHelpProvider('javascript', {
+      signatureHelpTriggerCharacters: ['(', ','],
+      provideSignatureHelp: (model, position) => {
+        const lineContent = model.getLineContent(position.lineNumber)
+        const beforeCursor = lineContent.substring(0, position.column - 1)
+        
+        // Find the method being called
+        const methodMatch = beforeCursor.match(/(app|world)\.(\w+)\s*\(/)
+        if (!methodMatch) return null
+
+        const [, prefix, methodName] = methodMatch
+        const suggestion = apiSuggestions.find(s => 
+          s.label === methodName && 
+          s.detail.toLowerCase().startsWith(prefix) &&
+          s.kind === 1 // Method
+        )
+
+        if (suggestion && suggestion.documentation) {
+          const params = suggestion.documentation.value.match(/\*\*Parameters:\*\*([\s\S]*?)(?=\n\n|$)/)?.[1]
+          if (params) {
+            const paramsList = params.split('\n')
+              .filter(line => line.trim().startsWith('-'))
+              .map(line => {
+                const paramMatch = line.match(/`([^`]+)`\s*-\s*(.*)/)
+                if (paramMatch) {
+                  const [paramName, paramType] = paramMatch[1].split(':').map(s => s.trim())
+                  return {
+                    label: paramName,
+                    documentation: paramMatch[2],
+                    type: paramType
+                  }
+                }
+                return null
+              })
+              .filter(Boolean)
+
+            return {
+              value: {
+                signatures: [{
+                  label: `${methodName}(${paramsList.map(p => p.label).join(', ')})`,
+                  documentation: suggestion.documentation.value,
+                  parameters: paramsList
+                }],
+                activeSignature: 0,
+                activeParameter: Math.max(0, (beforeCursor.match(/,/g) || []).length)
+              },
+              dispose: () => {}
+            }
+          }
+        }
+
+        return null
+      }
+    })
+
+    editor.onDidChangeModelContent(event => {
+      codeRef.current = editor.getValue()
+    })
+
+    editor.addAction({
+      id: 'save',
+      label: 'Save',
+      keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
+      run: save,
+    })
+
+    setEditor(editor)
+  })
+
+  return () => {
+    dead = true
+  }
+}, [])
   return (
     <div
       ref={paneRef}
