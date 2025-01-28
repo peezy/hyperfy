@@ -1,0 +1,327 @@
+[
+  {
+    "label": "instanceId",
+    "kind": 1,
+    "insertText": "instanceId",
+    "insertTextRules": 1,
+    "documentation": {
+      "value": "The instance ID of the current app.\nEvery app has its own unique ID that is shared across all clients and the server.\n\n**Returns:**\n`string` - The app instance ID",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy getter",
+    "sortText": "instanceid"
+  },
+  {
+    "label": "version",
+    "kind": 1,
+    "insertText": "version",
+    "insertTextRules": 1,
+    "documentation": {
+      "value": "The version of the app instance.\nThis number is incremented whenever the app is modified which includes\nbut is not limited to updating scripts and models.\n\n**Returns:**\n`string` - The app version",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy getter",
+    "sortText": "version"
+  },
+  {
+    "label": "state",
+    "kind": 1,
+    "insertText": "state",
+    "insertTextRules": 1,
+    "documentation": {
+      "value": "A plain old javascript object that you can use to store state in.\nThe servers state object is sent to all new clients that connect in their initial snapshot,\nallowing clients to initialize correctly, eg in the right position/mode.\n\n**Returns:**\n`Object` - The app state object",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy getter",
+    "sortText": "state"
+  },
+  {
+    "label": "state",
+    "kind": 1,
+    "insertText": "state(${1:value})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Sets the app state object\n\n**Parameters:**\n- `value: Object` - The new state object",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy setter",
+    "sortText": "state"
+  },
+  {
+    "label": "on",
+    "kind": 1,
+    "insertText": "on(${1:name}, ${2:callback})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Subscribes to custom networked app events and engine update events like `update`,\n`fixedUpdate` and `lateUpdate`.\nCustom networked events are received when a different client/server sends an event with `app.send(event, data)`.\nIMPORTANT: Only subscribe to update events when they are needed. The engine is optimized\nto completely skip over large amounts of apps that don't need to receive update events.\n\n**Parameters:**\n- `name: string` - The event name to subscribe to\n- `callback: Function` - The callback function to execute when the event occurs",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "on"
+  },
+  {
+    "label": "off",
+    "kind": 1,
+    "insertText": "off(${1:name}, ${2:callback})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Unsubscribes from custom events and update events.\nIMPORTANT: Be sure to unsubscribe from update events when they are not needed.\nThe engine is optimized to completely skip over large amounts of apps that don't\nneed to receive update events.\n\n**Parameters:**\n- `name: string` - The event name to unsubscribe from\n- `callback: Function` - The callback function to remove",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "off"
+  },
+  {
+    "label": "send",
+    "kind": 1,
+    "insertText": "send(${1:name}, ${2:data}, ${3:ignoreSocketId})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Sends an event across the network.\nIf the caller is on the client, the event is sent to the server. The ignoreSocketId argument is a no-op here.\nIf the caller is on the server, the event is sent to all clients, with the ignoreSocketId argument\nallowing you to skip sending to one specific client.\n\n**Parameters:**\n- `name: string` - Event name\n- `data: any` - Payload data\n- `ignoreSocketId: number` - If on server, ignores networkId for this event sent",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "send"
+  },
+  {
+    "label": "get",
+    "kind": 1,
+    "insertText": "get(${1:id})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Finds and returns any node with the matching ID from the model the app is using.\nIf your model is made with blender, this is the object \"name\".\nNOTE: Blender GLTF exporter renames objects in some cases, eg by removing spaces.\nBest practice is to simply name everything in UpperCamelCase with no other characters.\n\n**Parameters:**\n- `id: string` - The ID of the node to find\n\n**Returns:**\n`Node|null` - The node with the matching ID or null if not found",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "get"
+  },
+  {
+    "label": "create",
+    "kind": 1,
+    "insertText": "create(${1:name})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Creates and returns a node of the specified name.\n\n**Parameters:**\n- `name: string` - The name of the node to create\n\n**Returns:**\n`Node` - The newly created node",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "create"
+  },
+  {
+    "label": "control",
+    "kind": 1,
+    "insertText": "control(${1:options})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Provides control to a client to respond to inputs and move the camera etc.\nTODO: only allow on user interaction\nTODO: show UI with a button to release()\n\n**Parameters:**\n- `options: Object` - Control options\n\n**Returns:**\n`Control` - The control object",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "control"
+  },
+  {
+    "label": "configure",
+    "kind": 1,
+    "insertText": "configure(${1:fn})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Sets the configuration function for the entity\n\n**Parameters:**\n- `fn: Function` - The configuration function",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "configure"
+  },
+  {
+    "label": "config",
+    "kind": 1,
+    "insertText": "config",
+    "insertTextRules": 1,
+    "documentation": {
+      "value": "Gets the configuration object from the app's blueprint.\n\n**Returns:**\n`Object` - The app configuration object",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy getter",
+    "sortText": "config"
+  },
+  {
+    "label": "networkId",
+    "kind": 1,
+    "insertText": "networkId",
+    "insertTextRules": 1,
+    "documentation": {
+      "value": "A unique ID for the current server or client.\n```typescript\nfunction: string\n```",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy getter",
+    "sortText": "networkid"
+  },
+  {
+    "label": "isServer",
+    "kind": 1,
+    "insertText": "isServer",
+    "insertTextRules": 1,
+    "documentation": {
+      "value": "Whether the script is currently executing on the server.\n```typescript\nfunction: boolean\n```",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy getter",
+    "sortText": "isserver"
+  },
+  {
+    "label": "isClient",
+    "kind": 1,
+    "insertText": "isClient",
+    "insertTextRules": 1,
+    "documentation": {
+      "value": "Whether the script is currently executing on the client.\n```typescript\nfunction: boolean\n```",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy getter",
+    "sortText": "isclient"
+  },
+  {
+    "label": "add",
+    "kind": 1,
+    "insertText": "add(${1:pNode})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Adds a node into world-space, outside of the apps local hierarchy.\n\n**Parameters:**\n- `pNode: object` - The node to add to world-space",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "add"
+  },
+  {
+    "label": "remove",
+    "kind": 1,
+    "insertText": "remove(${1:pNode})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Removes a node from world-space, outside of the apps local hierarchy.\n\n**Parameters:**\n- `pNode: object` - The node to remove from world-space",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "remove"
+  },
+  {
+    "label": "attach",
+    "kind": 1,
+    "insertText": "attach(${1:pNode})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Adds a node into world-space, maintaining its current world transform.\n\n**Parameters:**\n- `pNode: object` - The node to attach to world-space",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "attach"
+  },
+  {
+    "label": "on",
+    "kind": 1,
+    "insertText": "on(${1:name}, ${2:callback})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Subscribes to world events.\nCurrently only 'enter' and 'leave' are available which let you know when a player enters or leaves the world.\n\n**Parameters:**\n- `name: string` - The event name to subscribe to\n- `callback: Function` - The callback function to execute when the event occurs",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "on"
+  },
+  {
+    "label": "off",
+    "kind": 1,
+    "insertText": "off(${1:name}, ${2:callback})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Unsubscribes from world events.\n\n**Parameters:**\n- `name: string` - The event name to unsubscribe from\n- `callback: Function` - The callback function to remove",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "off"
+  },
+  {
+    "label": "emit",
+    "kind": 1,
+    "insertText": "emit(${1:name}, ${2:data})",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Emits a custom event to the world. Cannot emit internal events.\n\n**Parameters:**\n- `name: string` - The name of the event to emit\n- `data: *` - The data to pass with the event",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "emit"
+  },
+  {
+    "label": "getTime",
+    "kind": 1,
+    "insertText": "getTime()",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Returns the current high-resolution timestamp.\n\n**Returns:**\n`number` - The current timestamp in milliseconds",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "gettime"
+  },
+  {
+    "label": "getTimestamp",
+    "kind": 1,
+    "insertText": "getTimestamp([${1:format}])",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Returns formatted timestamp string.\n\n**Parameters:**\n- `format?: string` - Optional moment.js format string\n\n**Returns:**\n`string` - The formatted timestamp",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "gettimestamp"
+  },
+  {
+    "label": "chat",
+    "kind": 1,
+    "insertText": "chat(${1:msg}, [${2:broadcast}])",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Sends a chat message.\n\n**Parameters:**\n- `msg: string` - The message to send\n- `broadcast?: boolean` - Whether to broadcast the message",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "chat"
+  },
+  {
+    "label": "getPlayer",
+    "kind": 1,
+    "insertText": "getPlayer([${1:playerId}])",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "Gets a player proxy object by ID.\n\n**Parameters:**\n- `playerId?: string` - Optional player ID. If omitted, returns the current player\n\n**Returns:**\n`object|undefined` - The player proxy object if found",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "getplayer"
+  }
+]
