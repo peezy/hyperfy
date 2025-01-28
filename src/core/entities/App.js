@@ -393,15 +393,34 @@ export class App extends Entity {
     const entity = this
     const world = this.world
     return {
+      /**
+       * A unique ID for the current server or client.
+       * @type {string}
+       */
       get networkId() {
         return world.network.id
       },
+
+      /**
+       * Whether the script is currently executing on the server.
+       * @type {boolean}
+       */
       get isServer() {
         return world.network.isServer
       },
+
+      /**
+       * Whether the script is currently executing on the client.
+       * @type {boolean}
+       */
       get isClient() {
         return world.network.isClient
       },
+
+      /**
+       * Adds a node into world-space, outside of the apps local hierarchy.
+       * @param {object} pNode - The node to add to world-space
+       */
       add(pNode) {
         const node = getRef(pNode)
         if (!node) return
@@ -411,6 +430,11 @@ export class App extends Entity {
         entity.worldNodes.add(node)
         node.activate({ world, entity, physics: true })
       },
+
+      /**
+       * Removes a node from world-space, outside of the apps local hierarchy.
+       * @param {object} pNode - The node to remove from world-space
+       */
       remove(pNode) {
         const node = getRef(pNode)
         if (!node) return
@@ -419,6 +443,11 @@ export class App extends Entity {
         entity.worldNodes.delete(node)
         node.deactivate()
       },
+
+      /**
+       * Adds a node into world-space, maintaining its current world transform.
+       * @param {object} pNode - The node to attach to world-space
+       */
       attach(pNode) {
         const node = getRef(pNode)
         if (!node) return
@@ -430,12 +459,31 @@ export class App extends Entity {
         node.activate({ world, entity, physics: true })
         entity.worldNodes.add(node)
       },
+
+      /**
+       * Subscribes to world events.
+       * Currently only 'enter' and 'leave' are available which let you know when a player enters or leaves the world.
+       * @param {string} name - The event name to subscribe to
+       * @param {Function} callback - The callback function to execute when the event occurs
+       */
       on(name, callback) {
         entity.onWorldEvent(name, callback)
       },
+
+      /**
+       * Unsubscribes from world events.
+       * @param {string} name - The event name to unsubscribe from
+       * @param {Function} callback - The callback function to remove
+       */
       off(name, callback) {
         entity.offWorldEvent(name, callback)
       },
+
+      /**
+       * Emits a custom event to the world. Cannot emit internal events.
+       * @param {string} name - The name of the event to emit
+       * @param {*} data - The data to pass with the event
+       */
       emit(name, data) {
         if (internalEvents.includes(name)) {
           return console.error(`apps cannot emit internal events (${name})`)
@@ -443,24 +491,47 @@ export class App extends Entity {
         warn('world.emit() is deprecated, use app.emit() instead')
         world.events.emit(name, data)
       },
+
+      /**
+       * Returns the current high-resolution timestamp.
+       * @returns {number} The current timestamp in milliseconds
+       */
       getTime() {
         return world.network.getTime()
       },
+
+      /**
+       * Returns formatted timestamp string.
+       * @param {string} [format] - Optional moment.js format string
+       * @returns {string} The formatted timestamp
+       */
       getTimestamp(format) {
         if (!format) return moment().toISOString()
         return moment().format(format)
       },
+
+      /**
+       * Sends a chat message.
+       * @param {string} msg - The message to send
+       * @param {boolean} [broadcast] - Whether to broadcast the message
+       */
       chat(msg, broadcast) {
         if (!msg) return
         world.chat.add(msg, broadcast)
       },
+
+      /**
+       * Gets a player proxy object by ID.
+       * @param {string} [playerId] - Optional player ID. If omitted, returns the current player
+       * @returns {object|undefined} The player proxy object if found
+       */
       getPlayer(playerId) {
         const player = world.entities.getPlayer(playerId || world.entities.player?.data.id)
         return player?.getProxy()
       },
       getEvm() {
         return world.evm
-      }
+      },
     }
   }
 
@@ -468,29 +539,76 @@ export class App extends Entity {
     const entity = this
     const world = this.world
     let proxy = {
+      /**
+       * The instance ID of the current app.
+       * Every app has its own unique ID that is shared across all clients and the server.
+       * @returns {string} The app instance ID
+       */
       get instanceId() {
         return entity.data.id
       },
+
+      /**
+       * The version of the app instance.
+       * This number is incremented whenever the app is modified which includes
+       * but is not limited to updating scripts and models.
+       * @returns {string} The app version
+       */
       get version() {
         return entity.blueprint.version
       },
+
+      /**
+       * A plain old javascript object that you can use to store state in.
+       * The servers state object is sent to all new clients that connect in their initial snapshot,
+       * allowing clients to initialize correctly, eg in the right position/mode.
+       * @returns {Object} The app state object
+       */
       get state() {
         return entity.data.state
       },
+
+      /**
+       * Sets the app state object
+       * @param {Object} value - The new state object
+       */
       set state(value) {
         entity.data.state = value
       },
+
+      /**
+       * Subscribes to custom networked app events and engine update events like `update`,
+       * `fixedUpdate` and `lateUpdate`.
+       * Custom networked events are received when a different client/server sends an event with `app.send(event, data)`.
+       * IMPORTANT: Only subscribe to update events when they are needed. The engine is optimized
+       * to completely skip over large amounts of apps that don't need to receive update events.
+       * @param {string} name - The event name to subscribe to
+       * @param {Function} callback - The callback function to execute when the event occurs
+       */
       on(name, callback) {
         entity.on(name, callback)
       },
+
+      /**
+       * Unsubscribes from custom events and update events.
+       * IMPORTANT: Be sure to unsubscribe from update events when they are not needed.
+       * The engine is optimized to completely skip over large amounts of apps that don't
+       * need to receive update events.
+       * @param {string} name - The event name to unsubscribe from
+       * @param {Function} callback - The callback function to remove
+       */
       off(name, callback) {
         entity.off(name, callback)
       },
+
       /**
-       * Send event to server
+       * Sends an event across the network.
+       * If the caller is on the client, the event is sent to the server. The ignoreSocketId argument is a no-op here.
+       * If the caller is on the server, the event is sent to all clients, with the ignoreSocketId argument
+       * allowing you to skip sending to one specific client.
        * @param {string} name - Event name
        * @param {any} data - Payload data
-       * @param {int} ignoreSocketId - if on server, ignores networkId for this event sent
+       * @param {number} ignoreSocketId - If on server, ignores networkId for this event sent
        */
       send(name, data, ignoreSocketId) {
         if (internalEvents.includes(name)) {
@@ -508,19 +626,42 @@ export class App extends Entity {
       },
       sendTo(nid, name, data) {
         if (world.network.isClient) return // client cant send events to other clients, unless...?
-        
+
         const event = [entity.data.id, entity.blueprint.version, name, data]
         world.network.sendTo(nid, 'entityEvent', event)
       },
+
+      /**
+       * Finds and returns any node with the matching ID from the model the app is using.
+       * If your model is made with blender, this is the object "name".
+       * NOTE: Blender GLTF exporter renames objects in some cases, eg by removing spaces.
+       * Best practice is to simply name everything in UpperCamelCase with no other characters.
+       * @param {string} id - The ID of the node to find
+       * @returns {Node|null} The node with the matching ID or null if not found
+       */
       get(id) {
         const node = entity.root.get(id)
         if (!node) return null
         return node.getProxy()
       },
+
+      /**
+       * Creates and returns a node of the specified name.
+       * @param {string} name - The name of the node to create
+       * @returns {Node} The newly created node
+       */
       create(name) {
         const node = entity.createNode(name)
         return node.getProxy()
       },
+
+      /**
+       * Provides control to a client to respond to inputs and move the camera etc.
+       * TODO: only allow on user interaction
+       * TODO: show UI with a button to release()
+       * @param {Object} options - Control options
+       * @returns {Control} The control object
+       */
       control(options) {
         // TODO: only allow on user interaction
         // TODO: show UI with a button to release()
@@ -531,15 +672,25 @@ export class App extends Entity {
         })
         return entity.control
       },
+
+      /**
+       * Sets the configuration function for the entity
+       * @param {Function} fn - The configuration function
+       */
       configure(fn) {
         entity.getConfig = fn
         entity.onConfigure?.(fn)
       },
+
+      /**
+       * Gets the configuration object from the app's blueprint.
+       * @returns {Object} The app configuration object
+       */
       get config() {
         return entity.blueprint.config
       },
       registerCommand(cmd, fn, isAdmin) {
-        if(world.network.isClient) return;
+        if (world.network.isClient) return
         world.chat.commands.set(cmd, { fn, isAdmin })
       },
     }
