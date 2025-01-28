@@ -8,7 +8,6 @@ import { CodePane } from './CodePane'
 import { AvatarPane } from './AvatarPane'
 import { ChatBox } from './ChatBox'
 import { useElemSize } from './useElemSize'
-import { MessageCircleMoreIcon, UnplugIcon, WifiOffIcon } from 'lucide-react'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 
