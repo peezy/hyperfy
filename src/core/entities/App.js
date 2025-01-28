@@ -416,6 +416,9 @@ export class App extends Entity {
       get state() {
         return entity.data.state
       },
+      get solana() {
+        return world.solana
+      },
       set state(value) {
         entity.data.state = value
       },

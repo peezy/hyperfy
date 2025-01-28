@@ -24,6 +24,8 @@ import { cls } from '../utils'
 import { uuid } from '../../core/utils'
 import moment from 'moment'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
+import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 
 export function GUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -41,6 +43,8 @@ export function GUI({ world }) {
 }
 
 function Content({ world, width, height }) {
+  const { connection } = useConnection()
+  const wallet = useWallet()
   const small = width < 600
   const [ready, setReady] = useState(false)
   const [inspect, setInspect] = useState(null)
@@ -61,6 +65,15 @@ function Content({ world, width, height }) {
       world.off('disconnect', setDisconnected)
     }
   }, [])
+
+  useEffect(() => {
+    if (!wallet || !connection) return
+    if (!world.solana.initialized) {
+      world.solana.wallet = wallet
+      world.solana.connection = connection
+    }
+  }, [wallet, connection])
+
   return (
     <div
       className='gui'
