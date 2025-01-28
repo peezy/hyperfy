@@ -23,6 +23,7 @@
     "start": "node build/index.js",
     "lint": "eslint . --ext .js,.jsx",
     "lint:fix": "eslint . --ext .js,.jsx --fix",
+    "docs:gen": "node scripts/generate_suggestions.js",
     "format": "prettier --write .",
     "check": "npm run lint && npm run format",
     "world:clean": "node world-clean.mjs"
