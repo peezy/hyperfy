@@ -53,17 +53,136 @@ export function CodePane({ entity, onClose }) {
         tabSize: 2,
         insertSpaces: true,
       })
+
+      // Define API suggestions based on AppProxy interface
+      const apiSuggestions = [
+        // Properties
+        {
+          label: 'instanceId',
+          kind: monaco.languages.CompletionItemKind.Property,
+          documentation: 'Get the unique instance ID of this app',
+          insertText: 'instanceId',
+          detail: 'readonly string',
+        },
+        {
+          label: 'version',
+          kind: monaco.languages.CompletionItemKind.Property,
+          documentation: 'Get the version of this app',
+          insertText: 'version',
+          detail: 'readonly string',
+        },
+        {
+          label: 'state',
+          kind: monaco.languages.CompletionItemKind.Property,
+          documentation: 'Get or set the app state',
+          insertText: 'state',
+          detail: 'any',
+        },
+        {
+          label: 'config',
+          kind: monaco.languages.CompletionItemKind.Property,
+          documentation: 'Get the app configuration',
+          insertText: 'config',
+          detail: 'readonly any',
+        },
+        // Methods
+        {
+          label: 'on',
+          kind: monaco.languages.CompletionItemKind.Method,
+          documentation: 'Register an event handler',
+          insertText: 'on(${1:name}, ${2:callback})',
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: '(name: string, callback: Function) => void',
+        },
+        {
+          label: 'off',
+          kind: monaco.languages.CompletionItemKind.Method,
+          documentation: 'Remove an event handler',
+          insertText: 'off(${1:name}, ${2:callback})',
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: '(name: string, callback: Function) => void',
+        },
+        {
+          label: 'send',
+          kind: monaco.languages.CompletionItemKind.Method,
+          documentation: 'Send an event with data',
+          insertText: 'send(${1:name}, ${2:data})',
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: '(name: string, data: any, ignoreSocketId?: string) => void',
+        },
+        {
+          label: 'get',
+          kind: monaco.languages.CompletionItemKind.Method,
+          documentation: 'Get a node by ID',
+          insertText: 'get(${1:id})',
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: '(id: string) => NodeProxy | null',
+        },
+        {
+          label: 'create',
+          kind: monaco.languages.CompletionItemKind.Method,
+          documentation: 'Create a new node',
+          insertText: 'create(${1:name})',
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: '(name: string) => NodeProxy',
+        },
+        {
+          label: 'control',
+          kind: monaco.languages.CompletionItemKind.Method,
+          documentation: 'Control the app with given options',
+          insertText: 'control(${1:options})',
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: '(options: ControlOptions) => Control',
+        },
+        {
+          label: 'configure',
+          kind: monaco.languages.CompletionItemKind.Method,
+          documentation: 'Configure the app with a configuration function',
+          insertText: 'configure(${1:fn})',
+          insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+          detail: '(fn: ConfigFunction) => void',
+        },
+      ]
+
+      // Register completion provider for JavaScript
+      monaco.languages.registerCompletionItemProvider('javascript', {
+        triggerCharacters: ['.'],
+        provideCompletionItems: (model, position) => {
+          // Get the current line content up to the cursor
+          const textUntilPosition = model.getValueInRange({
+            startLineNumber: position.lineNumber,
+            startColumn: 1,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          })
+
+          // Check if we're typing after 'app.'
+          if (textUntilPosition.match(/app\.$/)) {
+            return {
+              suggestions: apiSuggestions,
+            }
+          }
+
+          return {
+            suggestions: [],
+          }
+        },
+      })
+
       editor.onDidChangeModelContent(event => {
         codeRef.current = editor.getValue()
       })
+
       editor.addAction({
         id: 'save',
         label: 'Save',
         keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS],
         run: save,
       })
+
       setEditor(editor)
     })
+
     return () => {
       dead = true
     }
