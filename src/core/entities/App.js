@@ -458,11 +458,6 @@ export class App extends Entity {
         const player = world.entities.getPlayer(playerId || world.entities.player?.data.id)
         return player?.getProxy()
       },
-      registerCommand(cmd, fn, isAdmin) {
-        if(world.isClient) return;
-        world.chat.commands.set(cmd, { fn, isAdmin })
-        console.log(`registered command ${cmd} isAdmin ${isAdmin}`)
-      },
     }
   }
 
@@ -503,7 +498,7 @@ export class App extends Entity {
         world.events.emit(name, data)
       },
       sendTo(nid, name, data) {
-        if (world.isClient) return // client cant send events to other clients, unless...?
+        if (world.network.isClient) return // client cant send events to other clients, unless...?
         
         const event = [entity.data.id, entity.blueprint.version, name, data]
         world.network.sendTo(nid, 'entityEvent', event)
@@ -533,6 +528,10 @@ export class App extends Entity {
       },
       get config() {
         return entity.blueprint.config
+      },
+      registerCommand(cmd, fn, isAdmin) {
+        if(world.network.isClient) return;
+        world.chat.commands.set(cmd, { fn, isAdmin })
       },
     }
     proxy = Object.defineProperties(proxy, Object.getOwnPropertyDescriptors(this.root.getProxy())) // inherit root Node properties
