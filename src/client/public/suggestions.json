@@ -91,6 +91,32 @@
     "sortText": "send"
   },
   {
+    "label": "emit",
+    "kind": 1,
+    "insertText": "emit()",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "emit"
+  },
+  {
+    "label": "sendTo",
+    "kind": 1,
+    "insertText": "sendTo()",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "sendto"
+  },
+  {
     "label": "get",
     "kind": 1,
     "insertText": "get(${1:id})",
@@ -154,6 +180,19 @@
     },
     "detail": "App Proxy getter",
     "sortText": "config"
+  },
+  {
+    "label": "registerCommand",
+    "kind": 1,
+    "insertText": "registerCommand()",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "App Proxy method",
+    "sortText": "registercommand"
   },
   {
     "label": "networkId",
@@ -323,5 +362,18 @@
     },
     "detail": "World Proxy method",
     "sortText": "getplayer"
+  },
+  {
+    "label": "getEvm",
+    "kind": 1,
+    "insertText": "getEvm()",
+    "insertTextRules": 4,
+    "documentation": {
+      "value": "",
+      "isTrusted": true,
+      "supportThemeIcons": true
+    },
+    "detail": "World Proxy method",
+    "sortText": "getevm"
   }
 ]

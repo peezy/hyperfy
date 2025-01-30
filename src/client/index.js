@@ -67,22 +67,28 @@ function Hyperfy() {
   )
 }
 
-function App() {
-  const [connected, setConnected] = useState(false)
+import { useConnect, useAccount } from 'wagmi'
 
+function WalletOptions() {
+  const { connectors, connect } = useConnect()
+
+  return connectors.map(connector => (
+    <button key={connector.uid} onClick={() => connect({ connector })}>
+      {connector.name}
+    </button>
+  ))
+}
+
+const Switch = () => {
+  const { isConnected } = useAccount()
+
+  return !isConnected ? <WalletOptions /> : <Hyperfy />
+}
+
+function App() {
   return (
     <Providers>
-      {!connected ? (
-        <button
-          onClick={() => {
-            setConnected(true)
-          }}
-        >
-          connect
-        </button>
-      ) : (
-        <Hyperfy />
-      )}
+      <Switch />
     </Providers>
   )
 }
