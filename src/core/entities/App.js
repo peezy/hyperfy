@@ -400,6 +400,9 @@ export class App extends Entity {
         const player = world.entities.getPlayer(playerId || world.entities.player?.data.id)
         return player?.getProxy()
       },
+      getEvm() {
+        return world.evm
+      }
     }
   }
 
