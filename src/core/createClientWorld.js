@@ -4,6 +4,7 @@ import { Client } from './systems/Client'
 import { ClientControls } from './systems/ClientControls'
 import { ClientNetwork } from './systems/ClientNetwork'
 import { ClientLoader } from './systems/ClientLoader'
+import { Solana } from './systems/Solana'
 import { ClientGraphics } from './systems/ClientGraphics'
 import { ClientEnvironment } from './systems/ClientEnvironment'
 import { ClientAudio } from './systems/ClientAudio'
@@ -27,5 +28,6 @@ export function createClientWorld() {
   world.register('actions', ClientActions)
   world.register('nametags', Nametags)
   world.register('snaps', Snaps)
+  world.register('solana', Solana)
   return world
 }
