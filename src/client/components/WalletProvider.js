@@ -4,11 +4,12 @@ import { WalletAdapterNetwork } from '@solana/wallet-adapter-base'
 import { WalletModalProvider } from '@solana/wallet-adapter-react-ui'
 import { css } from '@firebolt-dev/css'
 // import { UnsafeBurnerWalletAdapter } from "@solana/wallet-adapter-wallets";
+import {  clusterApiUrl } from '@solana/web3.js'
 
 const RPC_URL = process.env.PUBLIC_RPC_URL
 
 export function WalletProvider({ children }) {
-  const network = WalletAdapterNetwork.Mainnet
+  const network = WalletAdapterNetwork.Devnet
   const wallets = useMemo(
     () => [
       // manually add any legacy wallet adapters here
@@ -18,7 +19,7 @@ export function WalletProvider({ children }) {
   )
 
   return (
-    <ConnectionProvider endpoint={RPC_URL}>
+    <ConnectionProvider endpoint={clusterApiUrl('devnet')}>
       <AdaptorWalletProvider wallets={wallets} autoConnect>
         <AdaptorStyles />
         <WalletModalProvider>{children}</WalletModalProvider>

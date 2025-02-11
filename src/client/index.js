@@ -8,6 +8,16 @@ import { loadPhysX } from './loadPhysX'
 import { GUI } from './components/GUI'
 import { WalletProvider } from './components/WalletProvider'
 
+// required for spl token program
+import * as buf from 'buffer'
+
+const Buffer = buf.default.Buffer
+
+// client support
+if (typeof window !== 'undefined') {
+  globalThis.Buffer = Buffer
+}
+
 function App() {
   const viewportRef = useRef()
   const uiRef = useRef()
