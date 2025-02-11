@@ -4,13 +4,10 @@ import { MessageCircleMoreIcon, SendHorizonalIcon } from 'lucide-react'
 import moment from 'moment'
 import { uuid } from '../../core/utils'
 import { cls } from '../utils'
-<<<<<<< HEAD
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
-=======
 import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
 import { useSplTransfer } from './useSendToken'
 
->>>>>>> d336323 (solana commands)
 
 const CHAT_TIME_REFRESH_RATE = 30 // every x seconds
 
