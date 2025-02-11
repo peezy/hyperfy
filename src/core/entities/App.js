@@ -400,6 +400,9 @@ export class App extends Entity {
         const player = world.entities.getPlayer(playerId || world.entities.player?.data.id)
         return player?.getProxy()
       },
+      getEvm() {
+        return world.evm
+      }
     }
   }
 
@@ -441,6 +444,12 @@ export class App extends Entity {
           return console.error(`apps cannot emit internal events (${name})`)
         }
         world.events.emit(name, data)
+      },
+      sendTo(nid, name, data) {
+        if (world.network.isClient) return // client cant send events to other clients, unless...?
+        
+        const event = [entity.data.id, entity.blueprint.version, name, data]
+        world.network.sendTo(nid, 'entityEvent', event)
       },
       get(id) {
         const node = entity.root.get(id)
@@ -485,6 +494,10 @@ export class App extends Entity {
       get config() {
         // deprecated. will be removed
         return entity.blueprint.props
+      },
+      registerCommand(cmd, fn, isAdmin) {
+        if(world.network.isClient) return;
+        world.chat.commands.set(cmd, { fn, isAdmin })
       },
     }
     proxy = Object.defineProperties(proxy, Object.getOwnPropertyDescriptors(this.root.getProxy())) // inherit root Node properties

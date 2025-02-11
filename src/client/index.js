@@ -17,6 +17,10 @@ const Buffer = buf.default.Buffer
 if (typeof window !== 'undefined') {
   globalThis.Buffer = Buffer
 }
+import { Providers } from './components/Providers'
+import * as evmActions from 'wagmi/actions'
+import { useConfig } from 'wagmi'
+import * as utils from 'viem/utils'
 
 function App() {
   const viewportRef = useRef()
@@ -39,6 +43,21 @@ function App() {
     ui.addEventListener('pointermove', onEvent)
     ui.addEventListener('pointerup', onEvent)
   }, [])
+
+  const config = useConfig()
+  const [initialized, setInitialized] = useState(false)
+  useEffect(() => {
+    if (initialized) return
+    setInitialized(true)
+
+    let evm = { actions: {}, utils }
+    for (const [action, fn] of Object.entries(evmActions)) {
+      evm.actions[action] = (...args) => fn(config, ...args)
+    }
+
+    world.evm = evm
+  }, [config])
+
   return (
     <div
       className='App'
@@ -72,4 +91,8 @@ function App() {
 }
 
 const root = createRoot(document.getElementById('root'))
-root.render(<App />)
+root.render(
+  <Providers>
+    <App />
+  </Providers>
+)

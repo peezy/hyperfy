@@ -28,6 +28,7 @@ import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { useWallet as useSolanaWallet } from '@solana/wallet-adapter-react'
 import { useSplTransfer } from './useSendToken'
+import { useConnect, useConnectors } from 'wagmi'
 
 export function GUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -149,6 +150,8 @@ function Side({ world }) {
       },
     })
   }
+  const { connect } = useConnect()
+  const connectors = useConnectors()
   useEffect(() => {
     const control = world.controls.bind({ priority: ControlPriorities.GUI })
     control.enter.onPress = () => {
@@ -177,12 +180,12 @@ function Side({ world }) {
     // check for client commands
     if (msg.startsWith('/')) {
       const [cmd, ...args] = msg.slice(1).split(' ')
-      console.log(cmd, args)
       if (cmd === 'stats') {
         world.stats.toggle()
         return
       } else if (cmd === 'connect') {
-        if (args[0]?.startsWith('sol')) {
+        const [chain] = args
+        if (chain.startsWith('sol')) {
           // connect()
           const wallet_name = wallet.wallets?.[0].adapter.name
           console.log(wallet)
@@ -190,14 +193,18 @@ function Side({ world }) {
           wallet.select(wallet_name)
           // await wallet.connect()
           console.log(wallet)
-        }
+        } else if (chain == 'evm') {
+          console.log('connect default evm chain')
+          connect({ connector: connectors?.[0] })
+        } // else if(chain in ['eth', 'base'])
       } else if (cmd === 'send') {
         const [token, recipient, amount] = args
         console.log([token, recipient, amount])
         handleTransfer(token, recipient, amount)
       } else if (cmd === 'disconnect') {
-        wallet?.disconnect()
-      }
+        // wallet?.disconnect()
+        console.log('TODO: handle evm or sol disconnect gracefully. maybe /onchain_reset nukes all connections?')
+      } //else if (cmd === 'switch_chain')
     }
     // otherwise post it
     const player = world.entities.player
