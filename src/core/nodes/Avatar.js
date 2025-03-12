@@ -116,6 +116,14 @@ export class Avatar extends Node {
     this.emote = url
   }
 
+  setHeight(height) {
+    if (!this.instance) { 
+      console.warn("Avatar instance is null")
+      return; 
+    }
+    this.instance.height = height
+  }
+
   get height() {
     // DEPRECATED: use .getHeight()
     return this.getHeight()

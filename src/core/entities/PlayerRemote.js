@@ -17,6 +17,7 @@ export class PlayerRemote extends Entity {
   constructor(world, data, local) {
     super(world, data, local)
     this.isPlayer = true
+    this.scale = new THREE.Vector3(1, 1, 1)
     this.init()
   }
 
@@ -91,12 +92,14 @@ export class PlayerRemote extends Entity {
     }
   }
 
-  applyAvatar() {
+  applyAvatar(forceUpdate=false) {
     const avatarUrl = this.data.sessionAvatar || this.data.avatar || 'asset://avatar.vrm'
-    if (this.avatarUrl === avatarUrl) return
+
+    if (this.avatarUrl === avatarUrl && !forceUpdate) return
     this.world.loader.load('avatar', avatarUrl).then(src => {
       if (this.avatar) this.avatar.deactivate()
       this.avatar = src.toNodes().get('avatar')
+      this.avatar.scale.set(this.scale.x, this.scale.y, this.scale.z)
       this.base.add(this.avatar)
       this.nametag.position.y = this.avatar.getHeadToHeight() + 0.2
       this.bubble.position.y = this.avatar.getHeadToHeight() + 0.2
@@ -150,6 +153,7 @@ export class PlayerRemote extends Entity {
 
   modify(data) {
     let avatarChanged
+    let forceChange
     if (data.hasOwnProperty('t')) {
       this.teleport++
     }

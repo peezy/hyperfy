@@ -1,6 +1,9 @@
 import { getRef } from '../nodes/Node'
 import { clamp, hasRole, uuid } from '../utils'
+import { bindRotations } from '../extras/bindRotations'
+
 import * as THREE from './three'
+import { DEG2RAD } from './general'
 
 const HEALTH_MAX = 100
 
@@ -94,6 +97,13 @@ export function createPlayerProxy(player) {
         world.network.send('entityModified', { id: player.data.id, health })
       }
       player.modify({ health })
+    },
+    avatarNode() {
+      return player.avatar;
+    },
+    scaleAvatar(x1, y1, z1) {
+      player.scale = new THREE.Vector3(x1, y1, z1)
+      player.applyAvatar(true)
     },
     hasEffect() {
       return !!player.data.effect

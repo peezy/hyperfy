@@ -130,6 +130,7 @@ export class PlayerLocal extends Entity {
     this.base.activate({ world: this.world, entity: this })
 
     this.camHeight = DEFAULT_CAM_HEIGHT
+    this.scale = new THREE.Vector3(1, 1, 1)
 
     this.applyAvatar()
 
@@ -153,14 +154,15 @@ export class PlayerLocal extends Entity {
     return this.data.sessionAvatar || this.data.avatar || 'asset://avatar.vrm'
   }
 
-  applyAvatar() {
+  applyAvatar(forceUpdate = false) {
     const avatarUrl = this.getAvatarUrl()
-    if (this.avatarUrl === avatarUrl) return
+    if (this.avatarUrl === avatarUrl && !forceUpdate) return
     this.world.loader
       .load('avatar', avatarUrl)
       .then(src => {
         if (this.avatar) this.avatar.deactivate()
         this.avatar = src.toNodes().get('avatar')
+        this.avatar.scale.set(this.scale.x, this.scale.y, this.scale.z)
         this.base.add(this.avatar)
         this.nametag.position.y = this.avatar.getHeadToHeight() + 0.2
         this.bubble.position.y = this.avatar.getHeadToHeight() + 0.2
@@ -168,7 +170,7 @@ export class PlayerLocal extends Entity {
           this.nametag.active = true
         }
         this.avatarUrl = avatarUrl
-        this.camHeight = this.avatar.height * 0.95
+        this.camHeight = (this.avatar.height * 0.95) * this.scale.y
       })
       .catch(err => {
         console.error(err)
@@ -941,6 +943,7 @@ export class PlayerLocal extends Entity {
 
   setSessionAvatar(avatar) {
     this.data.sessionAvatar = avatar
+    this.data.scale = this.scale
     this.applyAvatar()
     this.world.network.send('entityModified', {
       id: this.data.id,
