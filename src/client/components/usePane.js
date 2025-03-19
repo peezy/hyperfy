@@ -1,4 +1,4 @@
-import { cloneDeep, debounce } from 'lodash-es'
+import { debounce } from 'lodash-es'
 import { useEffect } from 'react'
 import { storage } from '../../core/storage'
 
@@ -23,16 +23,20 @@ let layer = 0
 export function usePane(id, paneRef, headRef, resizable = false) {
   useEffect(() => {
     let config = info.configs[id]
-    const pane = paneRef.current
+
+    // hack: for some reason width and height can end up zero
+    // so if they are, we just clear it and rebuild
+    if (config && (config.width === 0 || config.height === 0)) {
+      config = null
+    }
 
     if (!config) {
       const count = ++info.count
       config = {
-        id,
         y: count * 20,
         x: count * 20,
-        width: pane.offsetWidth,
-        height: pane.offsetHeight,
+        width: paneRef.current.offsetWidth,
+        height: paneRef.current.offsetHeight,
         layer: 0,
       }
       info.configs[id] = config
@@ -40,11 +44,12 @@ export function usePane(id, paneRef, headRef, resizable = false) {
     }
 
     if (!resizable) {
-      config.width = pane.offsetWidth
-      config.height = pane.offsetHeight
+      config.width = paneRef.current.offsetWidth
+      config.height = paneRef.current.offsetHeight
     }
 
     layer++
+    const pane = paneRef.current
 
     // ensure pane is within screen bounds so it can't get lost
     const maxX = window.innerWidth - config.width
@@ -87,7 +92,7 @@ export function usePane(id, paneRef, headRef, resizable = false) {
 
     const resizer = new ResizeObserver(entries => {
       const entry = entries[0]
-      if (entry && entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+      if (entry) {
         config.width = entry.contentRect.width
         config.height = entry.contentRect.height
         persist()
