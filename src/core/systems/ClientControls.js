@@ -358,7 +358,7 @@ export class ClientControls extends System {
 
   onPointerMove = e => {
     if (e.isCoreUI) return
-    // this.checkPointerChanges(e)
+    this.checkPointerChanges(e)
     const rect = this.viewport.getBoundingClientRect()
     const offsetX = e.pageX - rect.left
     const offsetY = e.pageY - rect.top
