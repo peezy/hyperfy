@@ -16,8 +16,7 @@ import {
 } from 'lucide-react'
 import moment from 'moment'
 
-import { InspectPane } from './InspectPane'
-import { CodePane } from './CodePane'
+import { CodeEditor } from './CodeEditor'
 import { AvatarPane } from './AvatarPane'
 import { useElemSize } from './useElemSize'
 import { MouseLeftIcon } from './MouseLeftIcon'
@@ -25,13 +24,16 @@ import { MouseRightIcon } from './MouseRightIcon'
 import { MouseWheelIcon } from './MouseWheelIcon'
 import { buttons, propToLabel } from '../../core/extras/buttons'
 import { cls } from '../utils'
-import { hasRole, uuid } from '../../core/utils'
+import { uuid } from '../../core/utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
 import { AppsPane } from './AppsPane'
 import { SettingsPane } from './SettingsPane'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { useConnection, useWallet } from '@solana/wallet-adapter-react'
 import { useSolanaSystem } from './useSolanaSystem'
+import { MenuMain } from './MenuMain'
+import { MenuApp } from './MenuApp'
+import { KeyboardIcon, MenuIcon, VRIcon } from './Icons'
 
 export function CoreUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -89,31 +91,37 @@ function Content({ world, width, height }) {
   const small = width < 600
   const [ready, setReady] = useState(false)
   const [player, setPlayer] = useState(() => world.entities.player)
-  const [inspect, setInspect] = useState(null)
+  const [visible, setVisible] = useState(world.ui.visible)
+  const [menu, setMenu] = useState(null)
   const [code, setCode] = useState(false)
   const [avatar, setAvatar] = useState(null)
   const [disconnected, setDisconnected] = useState(false)
-  const [settings, setSettings] = useState(false)
   const [apps, setApps] = useState(false)
   const [kicked, setKicked] = useState(null)
+  const [settings, setSettings] = useState(false)
   useEffect(() => {
     world.on('ready', setReady)
     world.on('player', setPlayer)
-    world.on('inspect', setInspect)
+    world.on('ui', setVisible)
+    world.on('menu', setMenu)
     world.on('code', setCode)
+    world.on('apps', setApps)
     world.on('avatar', setAvatar)
     world.on('kick', setKicked)
     world.on('disconnect', setDisconnected)
     return () => {
       world.off('ready', setReady)
       world.off('player', setPlayer)
-      world.off('inspect', setInspect)
+      world.off('ui', setVisible)
+      world.off('menu', setMenu)
       world.off('code', setCode)
+      world.off('apps', setApps)
       world.off('avatar', setAvatar)
       world.off('kick', setKicked)
       world.off('disconnect', setDisconnected)
     }
   }, [])
+
   useEffect(() => {
     const elem = ref.current
     const onEvent = e => {
@@ -129,45 +137,41 @@ function Content({ world, width, height }) {
     // elem.addEventListener('touchend', onEvent)
   }, [])
 
-  // const { transfer, balance } = useSplToken()
-  // useEffect(() => {
-  //   if (!wallet || !connection) return
-  //   if (!world.solana.initialized) {
-  //     world.solana.wallet = wallet
-  //     world.solana.connection = connection
-  //     world.solana.programs = {
-  //       token: { transfer, balance },
-  //     }
-  //   }
-  // }, [wallet, connection])
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${16 * world.prefs.ui}px`
+    function onChange(changes) {
+      if (changes.ui) {
+        document.documentElement.style.fontSize = `${16 * world.prefs.ui}px`
+      }
+    }
+    world.prefs.on('change', onChange)
+    return () => {
+      world.prefs.off('change', onChange)
+    }
+  }, [])
 
   return (
     <>
       <WalletModalButton world={world} />
       <div
         ref={ref}
-        className='coreUI'
+        className='coreui'
         css={css`
           position: absolute;
           inset: 0;
+          display: ${visible ? 'block' : 'none'};
         `}
       >
-        {inspect && <InspectPane key={`inspect-${inspect.data.id}`} world={world} entity={inspect} />}
-        {inspect && code && <CodePane key={`code-${inspect.data.id}`} world={world} entity={inspect} />}
-        {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}
         {disconnected && <Disconnected />}
         <Reticle world={world} />
         {<Toast world={world} />}
-        {ready && (
-          <Side
-            world={world}
-            player={player}
-            toggleSettings={() => setSettings(!settings)}
-            toggleApps={() => setApps(!apps)}
-          />
+        {ready && <Side world={world} player={player} menu={menu} />}
+        {ready && menu?.type === 'app' && code && (
+          <CodeEditor key={`code-${menu.app.data.id}`} world={world} app={menu.app} blur={menu.blur} />
         )}
+        {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}
+        {apps && <AppsPane world={world} close={() => world.ui.toggleApps()} />}
         {settings && <SettingsPane world={world} player={player} close={() => setSettings(false)} />}
-        {apps && <AppsPane world={world} close={() => setApps(false)} />}
         {!ready && <LoadingOverlay />}
         {kicked && <KickedOverlay code={kicked} />}
       </div>
@@ -175,14 +179,21 @@ function Content({ world, width, height }) {
   )
 }
 
-function Side({ world, player, toggleSettings, toggleApps }) {
+function Side({ world, menu }) {
   const touch = useMemo(() => navigator.userAgent.match(/OculusBrowser|iPhone|iPad|iPod|Android/i), [])
   const inputRef = useRef()
   const [msg, setMsg] = useState('')
   const [chat, setChat] = useState(false)
-  const canBuild = useMemo(() => {
-    return player && hasRole(player.data.roles, 'admin', 'builder')
-  }, [player])
+  const [actions, setActions] = useState(() => world.prefs.actions)
+  useEffect(() => {
+    const onChange = changes => {
+      if (changes.actions) setActions(changes.actions.value)
+    }
+    world.prefs.on('change', onChange)
+    return () => {
+      world.prefs.off('change', onChange)
+    }
+  }, [])
   useEffect(() => {
     const control = world.controls.bind({ priority: ControlPriorities.CORE_UI })
     control.slash.onPress = () => {
@@ -235,149 +246,121 @@ function Side({ world, player, toggleSettings, toggleApps }) {
   }
   return (
     <div
-      className='side'
+      className='side2'
       css={css`
         position: absolute;
-        top: 0;
-        left: 0;
-        bottom: 0;
+        top: 4rem;
+        left: 4rem;
+        bottom: 4rem;
+        max-width: 21rem;
         width: 100%;
-        max-width: 340px;
-        padding: 40px;
         display: flex;
         flex-direction: column;
         align-items: stretch;
-        @media all and (max-width: 700px) {
-          max-width: 320px;
-          padding: 20px;
-        }
-        .side-gap {
-          flex: 1;
-        }
-        .bar {
-          height: 50px;
+        font-size: 1rem;
+        .side2-btns {
           display: flex;
-          align-items: stretch;
-        }
-        .bar-btns {
-          pointer-events: auto;
-          border-radius: 25px;
-          /* background: rgba(22, 22, 28, 1);
-          border: 1px solid rgba(255, 255, 255, 0.03);
-          box-shadow: rgba(0, 0, 0, 0.5) 0px 10px 30px; */
-          background: rgba(22, 22, 28, 0.4);
-          backdrop-filter: blur(3px);
-          display: none;
           align-items: center;
-          &.active {
-            display: flex;
-          }
+          margin-left: -0.5rem;
         }
-        .bar-btn {
-          width: 50px;
-          height: 50px;
+        .side2-btn {
+          pointer-events: auto;
+          /* margin-bottom: 1rem; */
+          width: 2.5rem;
+          height: 2.5rem;
           display: flex;
           align-items: center;
           justify-content: center;
-          &.darken {
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 25px;
-          }
-          &-vr {
-            font-weight: 450;
-          }
-          &:hover {
-            cursor: pointer;
+          cursor: pointer;
+          svg {
+            filter: drop-shadow(0 0.0625rem 0.125rem rgba(0, 0, 0, 0.2));
           }
         }
-        .bar-chat {
+        .side2-mid {
           flex: 1;
-          pointer-events: auto;
-          padding: 0 0 0 16px;
-          border-radius: 25px;
-          /* background: rgba(22, 22, 28, 1);
-          border: 1px solid rgba(255, 255, 255, 0.03);
-          box-shadow: rgba(0, 0, 0, 0.5) 0px 10px 30px; */
-          background: rgba(22, 22, 28, 0.4);
-          backdrop-filter: blur(3px);
-          display: none;
+          display: flex;
+          flex-direction: column;
+          justify-content: center;
+        }
+        .side2-chatbox {
+          margin-top: 0.5rem;
+          background: rgba(0, 0, 0, 0.3);
+          padding: 0.625rem;
+          display: flex;
           align-items: center;
+          opacity: 0;
           &.active {
-            display: flex;
+            opacity: 1;
+            pointer-events: auto;
           }
           &-input {
             flex: 1;
+            /* paint-order: stroke fill; */
+            /* -webkit-text-stroke: 0.25rem rgba(0, 0, 0, 0.2); */
             &::placeholder {
-              color: #c8c8c8;
-            }
-          }
-          &-send {
-            width: 50px;
-            height: 50px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: rgba(255, 255, 255, 0.3);
-            &.active {
-              color: white;
+              color: rgba(255, 255, 255, 0.5);
             }
           }
         }
+        @media all and (max-width: 700px), (max-height: 700px) {
+          top: 1.5rem;
+          left: 1.5rem;
+          bottom: 1.5rem;
+        }
       `}
     >
-      {!touch && <Actions world={world} />}
-      {touch && <div className='side-gap' />}
-      <Messages world={world} active={chat} touch={touch} />
-      <div className='bar'>
-        <div className={cls('bar-btns', { active: !chat })}>
-          <div className='bar-btn darken' onClick={() => setChat(true)}>
-            <MessageCircleMoreIcon size={20} />
+      <div className='side2-btns'>
+        {touch && (
+          <div className='side2-btn' onClick={() => world.ui.toggleMain()}>
+            <MenuIcon size='1.7rem' />
           </div>
-          {world.xr.supportsVR && (
-            <div className={'bar-btn'} onClick={() => world.xr.enter()}>
-              <div className='bar-btn-vr'>VR</div>
-            </div>
-          )}
-          {/* <div className='bar-btn' onClick={null}>
-            <MicIcon size={20} />
-          </div> */}
-          {/* <div className='bar-btn' onClick={null}>
-            <StoreIcon size={20} />
-          </div> */}
-          <div className='bar-btn' onClick={toggleSettings}>
-            <SettingsIcon size={20} />
-          </div>
-          {canBuild && (
-            <div className='bar-btn' onClick={toggleApps}>
-              <ZapIcon size={20} />
-            </div>
-          )}
-        </div>
-        <label className={cls('bar-chat', { active: chat })}>
-          <input
-            ref={inputRef}
-            className='bar-chat-input'
-            type='text'
-            placeholder='Say something'
-            value={msg}
-            onChange={e => setMsg(e.target.value)}
-            onKeyDown={e => {
-              if (e.code === 'Escape') {
-                setChat(false)
-              }
-              // meta quest 3 isn't spec complaint and instead has e.code = '' and e.key = 'Enter'
-              // spec says e.code should be a key code and e.key should be the text output of the key eg 'b', 'B', and '\n'
-              if (e.code === 'Enter' || e.key === 'Enter') {
-                send(e)
-              }
+        )}
+        {touch && (
+          <div
+            className='side2-btn'
+            onClick={() => {
+              if (!chat) setChat(true)
             }}
-            onBlur={() => setChat(false)}
-          />
-          <div className={cls('bar-chat-send', { active: msg })}>
-            <SendHorizonalIcon size={20} />
+          >
+            <KeyboardIcon size='1.7rem' />
           </div>
-        </label>
+        )}
+        {world.xr.supportsVR && (
+          <div
+            className='side2-btn'
+            onClick={() => {
+              world.xr.enter()
+            }}
+          >
+            <VRIcon size='1.7rem' />
+          </div>
+        )}
       </div>
+      {menu?.type === 'main' && <MenuMain world={world} />}
+      {menu?.type === 'app' && <MenuApp key={menu.app.data.id} world={world} app={menu.app} blur={menu.blur} />}
+      <div className='side2-mid'>{!menu && !touch && actions && <Actions world={world} />}</div>
+      <Messages world={world} active={chat} touch={touch} />
+      <label className={cls('side2-chatbox', { active: chat })}>
+        <input
+          ref={inputRef}
+          className='side2-chatbox-input'
+          type='text'
+          placeholder='Say something...'
+          value={msg}
+          onChange={e => setMsg(e.target.value)}
+          onKeyDown={e => {
+            if (e.code === 'Escape') {
+              setChat(false)
+            }
+            // meta quest 3 isn't spec complaint and instead has e.code = '' and e.key = 'Enter'
+            // spec says e.code should be a key code and e.key should be the text output of the key eg 'b', 'B', and '\n'
+            if (e.code === 'Enter' || e.key === 'Enter') {
+              send(e)
+            }
+          }}
+          onBlur={() => setChat(false)}
+        />
+      </label>
     </div>
   )
 }
@@ -409,30 +392,44 @@ function Messages({ world, active, touch }) {
       spacerRef.current.style.height = contentRef.current.offsetHeight + 'px'
     }
     setTimeout(() => {
-      contentRef.current.scroll({
+      contentRef.current?.scroll({
         top: 9999999,
         behavior: didInit ? 'instant' : 'smooth',
       })
     }, 10)
     initRef.current = true
   }, [msgs])
+  useEffect(() => {
+    const content = contentRef.current
+    // const spacer = spacerRef.current
+    // spacer.style.height = content.offsetHeight + 'px'
+    const observer = new ResizeObserver(() => {
+      contentRef.current?.scroll({
+        top: 9999999,
+        behavior: 'instant',
+      })
+    })
+    observer.observe(content)
+    return () => {
+      observer.disconnect()
+    }
+  }, [])
   return (
     <div
       ref={contentRef}
       className={cls('messages noscrollbar', { active })}
       css={css`
-        padding: 0 8px 8px;
-        margin-bottom: 20px;
+        /* padding: 0 0 0.5rem; */
+        /* margin-bottom: 20px; */
         flex: 1;
-        max-height: ${touch ? '100' : '250'}px;
-        border-radius: 10px;
+        max-height: ${touch ? '6.25' : '16'}rem;
         transition: all 0.15s ease-out;
         display: flex;
         flex-direction: column;
         align-items: stretch;
         overflow-y: auto;
-        -webkit-mask-image: linear-gradient(to top, black calc(100% - 50px), black 50px, transparent);
-        mask-image: linear-gradient(to top, black calc(100% - 50px), black 50px, transparent);
+        -webkit-mask-image: linear-gradient(to top, black calc(100% - 10rem), black 10rem, transparent);
+        mask-image: linear-gradient(to top, black calc(100% - 10rem), black 10rem, transparent);
         &.active {
           pointer-events: auto;
         }
@@ -440,13 +437,13 @@ function Messages({ world, active, touch }) {
           flex-shrink: 0;
         }
         .message {
-          padding: 4px 0;
+          padding: 0.25rem 0;
           line-height: 1.4;
-          font-size: 15px;
-          text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+          font-size: 1rem;
+          paint-order: stroke fill;
+          -webkit-text-stroke: 0.25rem rgba(0, 0, 0, 0.2);
           &-from {
-            font-weight: 600;
-            margin-right: 4px;
+            margin-right: 0.25rem;
           }
           &-body {
             // ...
@@ -479,7 +476,7 @@ function Message({ msg, now }) {
   }, [now])
   return (
     <div className='message'>
-      {msg.from && <span className='message-from'>{msg.from}</span>}
+      {msg.from && <span className='message-from'>[{msg.from}]</span>}
       <span className='message-body'>{msg.body}</span>
       {/* <span>{timeAgo}</span> */}
     </div>
@@ -595,7 +592,6 @@ function Actions({ world }) {
     <div
       className='actions'
       css={css`
-        padding-left: 8px;
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -603,14 +599,14 @@ function Actions({ world }) {
         .actions-item {
           display: flex;
           align-items: center;
-          margin: 0 0 8px;
+          margin: 0 0 0.5rem;
           &-icon {
             // ...
           }
           &-label {
-            margin-left: 10px;
-            font-weight: 500;
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+            margin-left: 0.625em;
+            paint-order: stroke fill;
+            -webkit-text-stroke: 0.25rem rgba(0, 0, 0, 0.2);
           }
         }
       `}
@@ -649,14 +645,14 @@ function ActionPill({ label }) {
     <div
       className='actionpill'
       css={css`
-        border: 1.5px solid white;
-        border-radius: 4px;
+        border: 0.0625rem solid white;
+        border-radius: 0.25rem;
         background: rgba(0, 0, 0, 0.1);
-        padding: 4px 6px;
-        font-weight: 500;
-        font-size: 14px;
-        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+        padding: 0.25rem 0.375rem;
+        font-size: 0.875em;
         box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        paint-order: stroke fill;
+        -webkit-text-stroke: 0.25rem rgba(0, 0, 0, 0.2);
       `}
     >
       {label}
@@ -675,7 +671,7 @@ function ActionIcon({ icon: Icon }) {
         }
       `}
     >
-      <Icon />
+      <Icon size='1.5rem' />
     </div>
   )
 }

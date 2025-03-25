@@ -5,15 +5,13 @@ import { usePane } from './usePane'
 import { FileCode2Icon, XIcon } from 'lucide-react'
 import { hashFile } from '../../core/utils-client'
 
-export function CodePane({ entity, onClose }) {
-  const paneRef = useRef()
-  const headRef = useRef()
+export function CodeEditor({ app, blur, onClose }) {
   const containerRef = useRef()
   const codeRef = useRef()
   const [editor, setEditor] = useState(null)
   const save = async () => {
-    const world = entity.world
-    const blueprint = entity.blueprint
+    const world = app.world
+    const blueprint = app.blueprint
     const code = codeRef.current
     // convert to file
     const blob = new Blob([code], { type: 'text/plain' })
@@ -34,12 +32,11 @@ export function CodePane({ entity, onClose }) {
     // broadcast blueprint change to server + other clients
     world.network.send('blueprintModified', { id: blueprint.id, version, script: url })
   }
-  usePane('code', paneRef, headRef, true)
   useEffect(() => {
     let dead
     load().then(monaco => {
       if (dead) return
-      codeRef.current = entity.script?.code || '// ...'
+      codeRef.current = app.script?.code || '// ...'
       const container = containerRef.current
       const editor = monaco.editor.create(container, {
         value: codeRef.current,
@@ -70,23 +67,23 @@ export function CodePane({ entity, onClose }) {
   }, [])
   return (
     <div
-      ref={paneRef}
       className='acode'
       css={css`
         position: absolute;
-        top: 40px;
-        left: 40px;
+        top: 0;
+        right: 0;
+        bottom: 0;
         width: 640px;
-        height: 520px;
-        background: rgba(22, 22, 28, 1);
-        border: 1px solid rgba(255, 255, 255, 0.03);
-        border-radius: 10px;
-        box-shadow: rgba(0, 0, 0, 0.5) 0px 10px 30px;
+        background-color: rgba(15, 16, 24, 0.8);
         pointer-events: auto;
         display: flex;
-        resize: both;
         overflow: auto;
         flex-direction: column;
+        opacity: ${blur ? 0.3 : 1};
+        transform: ${blur ? 'translateX(100%)' : 'translateX(0%)'};
+        transition:
+          opacity 0.15s ease-out,
+          transform 0.15s ease-out;
         .acode-head {
           height: 50px;
           border-bottom: 1px solid rgba(255, 255, 255, 0.05);
@@ -123,12 +120,16 @@ export function CodePane({ entity, onClose }) {
           inset: 0;
           top: 20px;
         }
+        .monaco-editor {
+          // removes the blue focus border
+          --vscode-focusBorder: #00000000 !important;
+        }
       `}
     >
-      <div className='acode-head' ref={headRef}>
+      <div className='acode-head'>
         <FileCode2Icon size={16} />
         <div className='acode-head-title'>Code</div>
-        <div className='acode-head-close' onClick={() => world.emit('code', null)}>
+        <div className='acode-head-close' onClick={() => world.ui.toggleCode()}>
           <XIcon size={20} />
         </div>
       </div>
@@ -515,7 +516,8 @@ const darkPlusTheme = {
   ],
   colors: {
     // 'editor.foreground': '#f8f8f2',
-    'editor.background': '#16161c',
+    // 'editor.background': '#16161c',
+    'editor.background': '#00000000',
     // 'editor.selectionBackground': '#44475a',
     // // 'editor.lineHighlightBackground': '#44475a',
     // 'editor.lineHighlightBorder': '#44475a',

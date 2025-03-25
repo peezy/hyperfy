@@ -73,7 +73,7 @@ export class ClientBuilder extends System {
   }
 
   canBuild() {
-    return hasRole(this.world.entities.player?.data.roles, 'admin', 'builder')
+    return this.world.config.public || hasRole(this.world.entities.player?.data.roles, 'admin')
   }
 
   updateActions() {
@@ -128,8 +128,8 @@ export class ClientBuilder extends System {
       const entity = this.getEntityAtReticle()
       if (entity) {
         this.select(null)
+        this.world.ui.setMenu({ type: 'app', app: entity })
         this.control.pointer.unlock()
-        this.world.emit('inspect', entity)
       }
     }
     // inspect out of pointer-lock
@@ -137,8 +137,8 @@ export class ClientBuilder extends System {
       const entity = this.getEntityAtPointer()
       if (entity) {
         this.select(null)
+        this.world.ui.setMenu({ type: 'app', app: entity })
         this.control.pointer.unlock()
-        this.world.emit('inspect', entity)
       }
     }
     // unlink

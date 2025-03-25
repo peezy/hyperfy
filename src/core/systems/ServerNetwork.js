@@ -55,6 +55,17 @@ export class ServerNetwork extends System {
       data.state = {}
       this.world.entities.add(data, true)
     }
+    // hydrate config
+    let config = await this.db('config').where('key', 'config').first()
+    try {
+      config = JSON.parse(config.value)
+    } catch (err) {
+      console.error(err)
+      config = {}
+    }
+    this.world.config.deserialize(config)
+    // watch config changes
+    this.world.config.on('change', this.saveConfig)
     // queue first save
     if (SAVE_INTERVAL) {
       this.saveTimerId = setTimeout(this.save, SAVE_INTERVAL * 1000)
@@ -180,6 +191,28 @@ export class ServerNetwork extends System {
     this.saveTimerId = setTimeout(this.save, SAVE_INTERVAL * 1000)
   }
 
+  saveConfig = async () => {
+    const data = this.world.config.serialize()
+    const value = JSON.stringify(data)
+    await this.db('config')
+      .insert({
+        key: 'config',
+        value,
+      })
+      .onConflict('key')
+      .merge({
+        value,
+      })
+  }
+
+  isAdmin(player) {
+    return hasRole(player.data.roles, 'admin')
+  }
+
+  isBuilder(player) {
+    return this.world.config.public || this.isAdmin(player)
+  }
+
   async onConnection(ws, authToken) {
     try {
       // get or create user
@@ -233,7 +266,7 @@ export class ServerNetwork extends System {
           userId: user.id, // deprecated, same as userId
           name: user.name,
           health: HEALTH_MAX,
-          avatar: user.avatar,
+          avatar: user.avatar || this.world.config.avatar?.url || 'asset://avatar.vrm',
           roles: user.roles,
         },
         true
@@ -246,6 +279,7 @@ export class ServerNetwork extends System {
         assetsUrl: process.env.PUBLIC_ASSETS_URL,
         apiUrl: process.env.PUBLIC_API_URL,
         maxUploadSize: process.env.PUBLIC_MAX_UPLOAD_SIZE,
+        config: this.world.config.serialize(),
         chat: this.world.chat.serialize(),
         blueprints: this.world.blueprints.serialize(),
         entities: this.world.entities.serialize(),
@@ -314,8 +348,7 @@ export class ServerNetwork extends System {
       }
       if (cmd === 'spawn') {
         const player = socket.player
-        const roles = player.data.roles
-        if (!hasRole(roles, 'admin')) return
+        if (!this.isBuilder(socket.player)) return
         const action = arg1
         if (action === 'set') {
           this.spawn = { position: player.data.position.slice(), quaternion: player.data.quaternion.slice() }
@@ -338,8 +371,7 @@ export class ServerNetwork extends System {
       if (cmd === 'chat') {
         const code = arg1
         if (code !== 'clear') return
-        const player = socket.player
-        if (!hasRole(player.data.roles, 'admin')) {
+        if (!isBuilder(socket.player)) {
           return
         }
         this.world.chat.clear(true)
@@ -373,14 +405,16 @@ export class ServerNetwork extends System {
   }
 
   onEntityAdded = (socket, data) => {
-    // TODO: check client permission
+    if (!this.isBuilder(socket.player))
+      return console.error('player attempted to add entity without builder permission')
     const entity = this.world.entities.add(data)
     this.send('entityAdded', data, socket.id)
     if (entity.isApp) this.dirtyApps.add(entity.data.id)
   }
 
   onEntityModified = async (socket, data) => {
-    // TODO: check client permission
+    if (!this.isBuilder(socket.player))
+      return console.error('player attempted to modify entity without builder permission')
     const entity = this.world.entities.get(data.id)
     if (!entity) return console.error('onEntityModified: no entity found', data)
     entity.modify(data)
@@ -414,11 +448,50 @@ export class ServerNetwork extends System {
   }
 
   onEntityRemoved = (socket, id) => {
-    // TODO: check client permission
+    if (!this.isBuilder(socket.player))
+      return console.error('player attempted to emove entity without builder permission')
     const entity = this.world.entities.get(id)
     this.world.entities.remove(id)
     this.send('entityRemoved', id, socket.id)
     if (entity.isApp) this.dirtyApps.add(id)
+  }
+
+  onConfigModified = (socket, data) => {
+    if (!this.isBuilder(socket.player))
+      return console.error('player attempted to modify config without builder permission')
+    this.world.config.set(data.key, data.value)
+    this.send('configModified', data, socket.id)
+  }
+
+  onSpawnModified = async (socket, op) => {
+    if (!this.isBuilder(socket.player)) {
+      return console.error('player attempted to modify spawn without builder permission')
+    }
+    const player = socket.player
+    if (op === 'set') {
+      this.spawn = { position: player.data.position.slice(), quaternion: player.data.quaternion.slice() }
+    } else if (op === 'clear') {
+      this.spawn = { position: [0, 0, 0], quaternion: [0, 0, 0, 1] }
+    } else {
+      return
+    }
+    const data = JSON.stringify(this.spawn)
+    await this.db('config')
+      .insert({
+        key: 'spawn',
+        value: data,
+      })
+      .onConflict('key')
+      .merge({
+        value: data,
+      })
+    socket.send('chatAdded', {
+      id: uuid(),
+      from: null,
+      fromId: null,
+      body: op === 'set' ? 'Spawn updated' : 'Spawn cleared',
+      createdAt: moment().toISOString(),
+    })
   }
 
   onPlayerTeleport = (socket, data) => {

@@ -93,6 +93,15 @@ export class ClientNetwork extends System {
     this.maxUploadSize = data.maxUploadSize
     this.world.assetsUrl = data.assetsUrl
 
+    // preload environment model and avatar
+    if (data.config.model) {
+      this.world.loader.preload('model', data.config.model.url)
+    } else {
+      this.world.loader.preload('model', this.world.environment.base.model)
+    }
+    if (data.config.avatar) {
+      this.world.loader.preload('avatar', data.config.avatar.url)
+    }
     // preload some blueprints
     for (const item of data.blueprints) {
       if (item.preload) {
@@ -116,12 +125,13 @@ export class ClientNetwork extends System {
     // preload local player avatar
     for (const item of data.entities) {
       if (item.type === 'player' && item.owner === this.id) {
-        const url = item.sessionAvatar || item.avatar || 'asset://avatar.vrm'
+        const url = item.sessionAvatar || item.avatar
         this.world.loader.preload('avatar', url)
       }
     }
     this.world.loader.execPreload()
 
+    this.world.config.deserialize(data.config)
     this.world.chat.deserialize(data.chat)
     this.world.blueprints.deserialize(data.blueprints)
     this.world.entities.deserialize(data.entities)

@@ -1,6 +1,7 @@
 import * as THREE from './extras/three'
 import EventEmitter from 'eventemitter3'
 
+import { Config } from './systems/Config'
 import { Apps } from './systems/Apps'
 import { Anchors } from './systems/Anchors'
 import { Events } from './systems/Events'
@@ -31,6 +32,7 @@ export class World extends EventEmitter {
     this.camera = new THREE.PerspectiveCamera(70, 0, 0.2, 1200)
     this.rig.add(this.camera)
 
+    this.register('config', Config)
     this.register('apps', Apps)
     this.register('anchors', Anchors)
     this.register('events', Events)
