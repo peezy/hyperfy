@@ -1,19 +1,6 @@
 import { css } from '@firebolt-dev/css'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  LayoutGridIcon,
-  LoaderIcon,
-  Ellipsis,
-  MessageCircleMoreIcon,
-  MicIcon,
-  SearchIcon,
-  SendHorizonalIcon,
-  SettingsIcon,
-  StoreIcon,
-  UnplugIcon,
-  WifiOffIcon,
-  ZapIcon,
-} from 'lucide-react'
+import { LoaderIcon, WifiOffIcon } from 'lucide-react'
 import moment from 'moment'
 
 import { CodeEditor } from './CodeEditor'
@@ -27,10 +14,6 @@ import { cls } from '../utils'
 import { uuid } from '../../core/utils'
 import { ControlPriorities } from '../../core/extras/ControlPriorities'
 import { AppsPane } from './AppsPane'
-import { SettingsPane } from './SettingsPane'
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
-import { useConnection, useWallet } from '@solana/wallet-adapter-react'
-import { useSolanaSystem } from './useSolanaSystem'
 import { MenuMain } from './MenuMain'
 import { MenuApp } from './MenuApp'
 import { KeyboardIcon, MenuIcon, VRIcon } from './Icons'
@@ -50,44 +33,8 @@ export function CoreUI({ world }) {
   )
 }
 
-function WalletModalButton({ world }) {
-  // Use the new Solana system hook
-  const { wallet, connection } = useSolanaSystem(world)
-
-  return (
-    process.env.PUBLIC_CONNECTION_STRATEGY == 'button' && (
-      <div
-        css={css`
-          position: absolute;
-          top: 20px;
-          right: 20px;
-        `}
-      >
-        <WalletMultiButton
-          style={{
-            background: 'linear-gradient(180deg, rgba(40, 40, 45, 0.9) 0%, rgba(25, 25, 30, 0.9) 100%)',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(10px)',
-            color: 'white',
-            borderRadius: '12px',
-            padding: '10px 20px',
-            transition: 'all 0.2s ease',
-            '&:hover': {
-              background: 'linear-gradient(180deg, rgba(50, 50, 55, 0.9) 0%, rgba(35, 35, 40, 0.9) 100%)',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.1)',
-            },
-          }}
-        />
-      </div>
-    )
-  )
-}
-
 function Content({ world, width, height }) {
   const ref = useRef()
-  const { connection } = useConnection()
-  const wallet = useWallet()
   const small = width < 600
   const [ready, setReady] = useState(false)
   const [player, setPlayer] = useState(() => world.entities.player)
@@ -98,7 +45,6 @@ function Content({ world, width, height }) {
   const [disconnected, setDisconnected] = useState(false)
   const [apps, setApps] = useState(false)
   const [kicked, setKicked] = useState(null)
-  const [settings, setSettings] = useState(false)
   useEffect(() => {
     world.on('ready', setReady)
     world.on('player', setPlayer)
@@ -136,7 +82,6 @@ function Content({ world, width, height }) {
     // elem.addEventListener('touchmove', onEvent)
     // elem.addEventListener('touchend', onEvent)
   }, [])
-
   useEffect(() => {
     document.documentElement.style.fontSize = `${16 * world.prefs.ui}px`
     function onChange(changes) {
@@ -149,33 +94,28 @@ function Content({ world, width, height }) {
       world.prefs.off('change', onChange)
     }
   }, [])
-
   return (
-    <>
-      <WalletModalButton world={world} />
-      <div
-        ref={ref}
-        className='coreui'
-        css={css`
-          position: absolute;
-          inset: 0;
-          display: ${visible ? 'block' : 'none'};
-        `}
-      >
-        {disconnected && <Disconnected />}
-        <Reticle world={world} />
-        {<Toast world={world} />}
-        {ready && <Side world={world} player={player} menu={menu} />}
-        {ready && menu?.type === 'app' && code && (
-          <CodeEditor key={`code-${menu.app.data.id}`} world={world} app={menu.app} blur={menu.blur} />
-        )}
-        {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}
-        {apps && <AppsPane world={world} close={() => world.ui.toggleApps()} />}
-        {settings && <SettingsPane world={world} player={player} close={() => setSettings(false)} />}
-        {!ready && <LoadingOverlay />}
-        {kicked && <KickedOverlay code={kicked} />}
-      </div>
-    </>
+    <div
+      ref={ref}
+      className='coreui'
+      css={css`
+        position: absolute;
+        inset: 0;
+        display: ${visible ? 'block' : 'none'};
+      `}
+    >
+      {disconnected && <Disconnected />}
+      <Reticle world={world} />
+      {<Toast world={world} />}
+      {ready && <Side world={world} player={player} menu={menu} />}
+      {ready && menu?.type === 'app' && code && (
+        <CodeEditor key={`code-${menu.app.data.id}`} world={world} app={menu.app} blur={menu.blur} />
+      )}
+      {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}
+      {apps && <AppsPane world={world} close={() => world.ui.toggleApps()} />}
+      {!ready && <LoadingOverlay />}
+      {kicked && <KickedOverlay code={kicked} />}
+    </div>
   )
 }
 
@@ -513,16 +453,6 @@ function Disconnected() {
 }
 
 function LoadingOverlay() {
-  const [dots, setDots] = useState(1)
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setDots(prev => (prev < 3 ? prev + 1 : 1))
-    }, 500) // Change dots every 500ms
-
-    return () => clearInterval(interval)
-  }, [])
-
   return (
     <div
       css={css`
@@ -533,17 +463,20 @@ function LoadingOverlay() {
         align-items: center;
         justify-content: center;
         pointer-events: auto;
+        @keyframes spin {
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
+        }
+        svg {
+          animation: spin 1s linear infinite;
+        }
       `}
     >
-      <div
-        css={css`
-          font-size: 30px;
-          min-width: 60px;
-          text-align: center;
-        `}
-      >
-        {'.'.repeat(dots)}
-      </div>
+      <LoaderIcon size={30} />
     </div>
   )
 }
@@ -611,12 +544,12 @@ function Actions({ world }) {
         }
       `}
     >
-      {/* {actions.map(action => (
+      {actions.map(action => (
         <div className='actions-item' key={action.id}>
           <div className='actions-item-icon'>{getActionIcon(action.type)}</div>
           <div className='actions-item-label'>{action.label}</div>
         </div>
-      ))} */}
+      ))}
     </div>
   )
 }
@@ -697,56 +630,16 @@ function Reticle({ world }) {
         display: flex;
         align-items: center;
         justify-content: center;
-        pointer-events: none;
-
-        .crosshair {
-          position: relative;
-          width: 30px;
-          height: 30px;
-
-          &::before,
-          &::after {
-            content: '';
-            position: absolute;
-            background-color: ${buildMode ? '#ff4d4d' : 'white'};
-            mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
-          }
-
-          /* Horizontal line */
-          &::before {
-            width: 100%;
-            height: 2px;
-            top: 50%;
-            left: 0;
-            transform: translateY(-50%);
-          }
-
-          /* Vertical line */
-          &::after {
-            width: 2px;
-            height: 100%;
-            left: 50%;
-            top: 0;
-            transform: translateX(-50%);
-          }
-
-          .center-dot {
-            position: absolute;
-            width: 4px;
-            height: 4px;
-            background-color: ${buildMode ? '#ff4d4d' : 'white'};
-            border-radius: 50%;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
-          }
+        .reticle-item {
+          width: 20px;
+          height: 20px;
+          border-radius: 10px;
+          border: 2px solid ${buildMode ? '#ff4d4d' : 'white'};
+          mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
         }
       `}
     >
-      <div className='crosshair'>
-        <div className='center-dot'></div>
-      </div>
+      <div className='reticle-item' />
     </div>
   )
 }
