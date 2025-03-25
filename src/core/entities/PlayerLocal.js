@@ -18,8 +18,8 @@ const SCALE_IDENTITY = new THREE.Vector3(1, 1, 1)
 const POINTER_LOOK_SPEED = 0.1
 const PAN_LOOK_SPEED = 0.4
 const ZOOM_SPEED = 2
-const MIN_ZOOM = 2
-const MAX_ZOOM = 100 // 16
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 16 // 16
 const STICK_MAX_DISTANCE = 50
 const DEFAULT_CAM_HEIGHT = 1.2
 
@@ -66,6 +66,9 @@ export class PlayerLocal extends Entity {
 
     this.pushForce = null
     this.pushForceInit = false
+
+    this.doubleJumpEnabled = false
+    this.zoomEnabled = true
 
     this.slipping = false
 
@@ -575,7 +578,8 @@ export class PlayerLocal extends Entity {
       // ground/air jump
       const shouldJump =
         this.grounded && !this.jumping && this.jumpDown && !this.data.effect?.snare && !this.data.effect?.freeze
-      const shouldAirJump = !this.grounded && !this.airJumped && this.jumpPressed && !this.world.builder.enabled
+      const shouldAirJump =
+        !this.grounded && !this.airJumped && this.jumpPressed && !this.world.builder.enabled && this.doubleJumpEnabled
       if (shouldJump || shouldAirJump) {
         // calc velocity needed to reach jump height
         let jumpVelocity = Math.sqrt(2 * this.effectiveGravity * this.jumpHeight)
@@ -671,7 +675,7 @@ export class PlayerLocal extends Entity {
     }
 
     // zoom camera if scrolling wheel
-    if (!isXR) {
+    if (!isXR && this.zoomEnabled) {
       this.cam.zoom += -this.control.scrollDelta.value * ZOOM_SPEED * delta
       this.cam.zoom = clamp(this.cam.zoom, MIN_ZOOM, MAX_ZOOM)
     }
@@ -937,6 +941,25 @@ export class PlayerLocal extends Entity {
       this.pushForce = force.clone()
       this.pushForceInit = false
     }
+  }
+
+  setDoubleJumpEnabled(enabled) {
+    this.doubleJumpEnabled = !!enabled
+    return this.doubleJumpEnabled
+  }
+
+  isInAir() {
+    return this.jumped || this.jumping || this.airJumping || this.falling
+  }
+
+  setZoom(zoomValue) {
+    const newZoom = clamp(zoomValue, MIN_ZOOM, MAX_ZOOM)
+    this.cam.zoom = newZoom
+    this.control.camera.zoom = newZoom
+  }
+
+  setZoomEnabled(enabled) {
+    this.zoomEnabled = enabled
   }
 
   setSessionAvatar(avatar) {

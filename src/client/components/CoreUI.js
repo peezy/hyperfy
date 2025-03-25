@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   LayoutGridIcon,
   LoaderIcon,
+  Ellipsis,
   MessageCircleMoreIcon,
   MicIcon,
   SearchIcon,
@@ -515,6 +516,16 @@ function Disconnected() {
 }
 
 function LoadingOverlay() {
+  const [dots, setDots] = useState(1)
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setDots(prev => (prev < 3 ? prev + 1 : 1))
+    }, 500) // Change dots every 500ms
+
+    return () => clearInterval(interval)
+  }, [])
+
   return (
     <div
       css={css`
@@ -525,20 +536,17 @@ function LoadingOverlay() {
         align-items: center;
         justify-content: center;
         pointer-events: auto;
-        @keyframes spin {
-          from {
-            transform: rotate(0deg);
-          }
-          to {
-            transform: rotate(360deg);
-          }
-        }
-        svg {
-          animation: spin 1s linear infinite;
-        }
       `}
     >
-      <LoaderIcon size={30} />
+      <div
+        css={css`
+          font-size: 30px;
+          min-width: 60px;
+          text-align: center;
+        `}
+      >
+        {'.'.repeat(dots)}
+      </div>
     </div>
   )
 }
@@ -607,12 +615,12 @@ function Actions({ world }) {
         }
       `}
     >
-      {actions.map(action => (
+      {/* {actions.map(action => (
         <div className='actions-item' key={action.id}>
           <div className='actions-item-icon'>{getActionIcon(action.type)}</div>
           <div className='actions-item-label'>{action.label}</div>
         </div>
-      ))}
+      ))} */}
     </div>
   )
 }
@@ -693,16 +701,56 @@ function Reticle({ world }) {
         display: flex;
         align-items: center;
         justify-content: center;
-        .reticle-item {
-          width: 20px;
-          height: 20px;
-          border-radius: 10px;
-          border: 2px solid ${buildMode ? '#ff4d4d' : 'white'};
-          mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
+        pointer-events: none;
+
+        .crosshair {
+          position: relative;
+          width: 30px;
+          height: 30px;
+
+          &::before,
+          &::after {
+            content: '';
+            position: absolute;
+            background-color: ${buildMode ? '#ff4d4d' : 'white'};
+            mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
+          }
+
+          /* Horizontal line */
+          &::before {
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+          }
+
+          /* Vertical line */
+          &::after {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            top: 0;
+            transform: translateX(-50%);
+          }
+
+          .center-dot {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background-color: ${buildMode ? '#ff4d4d' : 'white'};
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
+          }
         }
       `}
     >
-      <div className='reticle-item' />
+      <div className='crosshair'>
+        <div className='center-dot'></div>
+      </div>
     </div>
   )
 }
