@@ -630,16 +630,56 @@ function Reticle({ world }) {
         display: flex;
         align-items: center;
         justify-content: center;
-        .reticle-item {
-          width: 20px;
-          height: 20px;
-          border-radius: 10px;
-          border: 2px solid ${buildMode ? '#ff4d4d' : 'white'};
-          mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
+        pointer-events: none;
+
+        .crosshair {
+          position: relative;
+          width: 30px;
+          height: 30px;
+
+          &::before,
+          &::after {
+            content: '';
+            position: absolute;
+            background-color: ${buildMode ? '#ff4d4d' : 'white'};
+            mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
+          }
+
+          /* Horizontal line */
+          &::before {
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+          }
+
+          /* Vertical line */
+          &::after {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            top: 0;
+            transform: translateX(-50%);
+          }
+
+          .center-dot {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background-color: ${buildMode ? '#ff4d4d' : 'white'};
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
+          }
         }
       `}
     >
-      <div className='reticle-item' />
+      <div className='crosshair'>
+        <div className='center-dot'></div>
+      </div>
     </div>
   )
 }
