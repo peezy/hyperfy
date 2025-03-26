@@ -27,7 +27,12 @@ export class ClientUI extends System {
         this.setMenu({ type: 'main' })
       }
     }
-    if (this.control.keyZ.pressed) {
+    if (
+      this.control.keyZ.pressed &&
+      !this.control.metaLeft.down &&
+      !this.control.controlLeft.down &&
+      !this.control.shiftLeft.down
+    ) {
       this.toggleUI()
     }
     if (this.control.pointer.locked) {

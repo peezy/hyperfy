@@ -128,8 +128,8 @@ export class ClientBuilder extends System {
       const entity = this.getEntityAtReticle()
       if (entity) {
         this.select(null)
-        this.world.ui.setMenu({ type: 'app', app: entity })
         this.control.pointer.unlock()
+        this.world.ui.setMenu({ type: 'app', app: entity })
       }
     }
     // inspect out of pointer-lock
@@ -137,8 +137,8 @@ export class ClientBuilder extends System {
       const entity = this.getEntityAtPointer()
       if (entity) {
         this.select(null)
-        this.world.ui.setMenu({ type: 'app', app: entity })
         this.control.pointer.unlock()
+        this.world.ui.setMenu({ type: 'app', app: entity })
       }
     }
     // unlink

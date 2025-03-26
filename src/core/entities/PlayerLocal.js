@@ -278,6 +278,7 @@ export class PlayerLocal extends Entity {
     this.control.camera.quaternion.copy(this.cam.quaternion)
     this.control.camera.zoom = this.cam.zoom
     // this.control.setActions([{ type: 'space', label: 'Jump / Double-Jump' }])
+    // this.control.setActions([{ type: 'escape', label: 'Menu' }])
   }
 
   toggleFlying() {

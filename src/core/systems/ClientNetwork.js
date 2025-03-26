@@ -1,6 +1,8 @@
+import moment from 'moment'
 import { emoteUrls } from '../extras/playerEmotes'
 import { readPacket, writePacket } from '../packets'
 import { storage } from '../storage'
+import { uuid } from '../utils'
 import { hashFile } from '../utils-client'
 import { System } from './System'
 
@@ -208,6 +210,13 @@ export class ClientNetwork extends System {
   }
 
   onClose = code => {
+    this.world.chat.add({
+      id: uuid(),
+      from: null,
+      fromId: null,
+      body: `You have been disconnected.`,
+      createdAt: moment().toISOString(),
+    })
     this.world.emit('disconnect', code || true)
     console.log('disconnect', code)
   }

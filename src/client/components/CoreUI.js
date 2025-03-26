@@ -279,7 +279,7 @@ function Side({ world, menu }) {
       {menu?.type === 'main' && <MenuMain world={world} />}
       {menu?.type === 'app' && <MenuApp key={menu.app.data.id} world={world} app={menu.app} blur={menu.blur} />}
       <div className='side2-mid'>{!menu && !touch && actions && <Actions world={world} />}</div>
-      <Messages world={world} active={chat} touch={touch} />
+      <Messages world={world} active={chat || menu} touch={touch} />
       <label className={cls('side2-chatbox', { active: chat })}>
         <input
           ref={inputRef}
@@ -424,31 +424,34 @@ function Message({ msg, now }) {
 }
 
 function Disconnected() {
+  // useEffect(() => {
+  //   document.body.style.filter = 'grayscale(100%)'
+  //   return () => {
+  //     document.body.style.filter = null
+  //   }
+  // }, [])
   return (
     <div
       css={css`
-        position: absolute;
-        top: 20px;
-        right: 20px;
-        background: rgba(22, 22, 28, 1);
-        border: 1px solid rgba(255, 255, 255, 0.03);
-        box-shadow: rgba(0, 0, 0, 0.5) 0px 10px 30px;
-        height: 40px;
-        border-radius: 20px;
-        display: flex;
-        align-items: center;
-        padding: 0 14px 0 17px;
-        svg {
-          margin-left: 8px;
-        }
-        span {
-          font-size: 14px;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        backdrop-filter: grayscale(100%);
+        pointer-events: none;
+        z-index: 9999;
+        animation: fadeIn 3s forwards;
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
         }
       `}
-    >
-      <span>Disconnected</span>
-      <WifiOffIcon size={16} />
-    </div>
+    />
   )
 }
 

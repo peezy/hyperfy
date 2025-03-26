@@ -4,6 +4,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from './Icons'
 import { useUpdate } from './useUpdate'
 import { hashFile } from '../../core/utils-client'
 import { LoaderIcon, XIcon } from 'lucide-react'
+import { downloadFile } from '../../core/extras/downloadFile'
 
 const MenuContext = createContext()
 
@@ -597,9 +598,17 @@ export function MenuItemSwitch({ label, hint, options, value, onChange }) {
 // todo: blueprint models need migrating to file object format so
 // we can replace needing this and instead use MenuItemFile, but
 // that will also somehow need to support both model and avatar kinds.
-export function MenuItemFileBtn({ label, hint, accept, onChange }) {
+export function MenuItemFileBtn({ label, hint, accept, value, onChange }) {
   const setHint = useContext(MenuContext)
   const [key, setKey] = useState(0)
+  const handleDownload = e => {
+    if (e.shiftKey) {
+      e.preventDefault()
+      const file = world.loader.getFile(value)
+      if (!file) return
+      downloadFile(file)
+    }
+  }
   const handleChange = e => {
     setKey(n => n + 1)
     onChange(e.target.files[0])
@@ -628,6 +637,7 @@ export function MenuItemFileBtn({ label, hint, accept, onChange }) {
       `}
       onPointerEnter={() => setHint(hint)}
       onPointerLeave={() => setHint(null)}
+      onClick={handleDownload}
     >
       <div className='menuitemfilebtn-label'>{label}</div>
       <input key={key} type='file' accept={accept} onChange={handleChange} />
@@ -721,6 +731,14 @@ export function MenuItemFile({ world, label, hint, kind: kindName, value, onChan
     e.stopPropagation()
     onChange(null)
   }
+  const handleDownload = e => {
+    if (e.shiftKey && value?.url) {
+      e.preventDefault()
+      const file = world.loader.getFile(value.url, value.name)
+      if (!file) return
+      downloadFile(file)
+    }
+  }
   const n = nRef.current
   const name = loading?.name || value?.name
   return (
@@ -790,6 +808,7 @@ export function MenuItemFile({ world, label, hint, kind: kindName, value, onChan
       `}
       onPointerEnter={() => setHint(hint)}
       onPointerLeave={() => setHint(null)}
+      onClick={handleDownload}
     >
       <div className='menuitemfile-label'>{label}</div>
       {!value && !loading && <div className='menuitemfile-placeholder'>{kind.placeholder}</div>}

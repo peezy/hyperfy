@@ -70,8 +70,15 @@ export class ClientLoader extends System {
     this.files.set(url, file)
   }
 
-  getFile(url) {
+  getFile(url, name) {
     url = this.world.resolveURL(url)
+    if (name) {
+      const file = this.files.get(url)
+      return new File([file], name, {
+        type: file.type, // Preserve the MIME type
+        lastModified: file.lastModified, // Preserve the last modified timestamp
+      })
+    }
     return this.files.get(url)
   }
 

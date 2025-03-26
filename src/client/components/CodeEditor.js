@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { css } from '@firebolt-dev/css'
 
-import { usePane } from './usePane'
 import { FileCode2Icon, XIcon } from 'lucide-react'
 import { hashFile } from '../../core/utils-client'
+import { storage } from '../../core/storage'
 
 export function CodeEditor({ app, blur, onClose }) {
   const containerRef = useRef()
+  const resizeRef = useRef()
+  const mountRef = useRef()
   const codeRef = useRef()
   const [editor, setEditor] = useState(null)
   const save = async () => {
@@ -37,8 +39,8 @@ export function CodeEditor({ app, blur, onClose }) {
     load().then(monaco => {
       if (dead) return
       codeRef.current = app.script?.code || '// ...'
-      const container = containerRef.current
-      const editor = monaco.editor.create(container, {
+      const mount = mountRef.current
+      const editor = monaco.editor.create(mount, {
         value: codeRef.current,
         language: 'javascript',
         scrollBeyondLastLine: true,
@@ -65,8 +67,35 @@ export function CodeEditor({ app, blur, onClose }) {
       dead = true
     }
   }, [])
+  useEffect(() => {
+    const elem = resizeRef.current
+    const container = containerRef.current
+    container.style.width = `${storage.get('code-editor-width', 640)}px`
+    let active
+    function onPointerDown(e) {
+      active = true
+      elem.addEventListener('pointermove', onPointerMove)
+      elem.addEventListener('pointerup', onPointerUp)
+      e.currentTarget.setPointerCapture(e.pointerId)
+    }
+    function onPointerMove(e) {
+      const newWidth = container.offsetWidth - e.movementX
+      container.style.width = `${newWidth}px`
+      storage.set('code-editor-width', newWidth)
+    }
+    function onPointerUp(e) {
+      e.currentTarget.releasePointerCapture(e.pointerId)
+      elem.removeEventListener('pointermove', onPointerMove)
+      elem.removeEventListener('pointerup', onPointerUp)
+    }
+    elem.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      elem.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [])
   return (
     <div
+      ref={containerRef}
       className='acode'
       css={css`
         position: absolute;
@@ -77,7 +106,6 @@ export function CodeEditor({ app, blur, onClose }) {
         background-color: rgba(15, 16, 24, 0.8);
         pointer-events: auto;
         display: flex;
-        overflow: auto;
         flex-direction: column;
         opacity: ${blur ? 0.3 : 1};
         transform: ${blur ? 'translateX(100%)' : 'translateX(0%)'};
@@ -91,8 +119,8 @@ export function CodeEditor({ app, blur, onClose }) {
           align-items: center;
           padding: 0 10px 0 20px;
           &-title {
-            padding-left: 7px;
             font-weight: 500;
+            font-size: 20px;
             flex: 1;
           }
           &-close {
@@ -108,6 +136,14 @@ export function CodeEditor({ app, blur, onClose }) {
             }
           }
         }
+        .acode-resizer {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          left: -5px;
+          width: 10px;
+          cursor: ew-resize;
+        }
         .acode-content {
           flex: 1;
           position: relative;
@@ -115,10 +151,10 @@ export function CodeEditor({ app, blur, onClose }) {
           border-bottom-left-radius: 10px;
           border-bottom-right-radius: 10px;
         }
-        .acode-container {
+        .acode-mount {
           position: absolute;
           inset: 0;
-          top: 20px;
+          /* top: 20px; */
         }
         .monaco-editor {
           // removes the blue focus border
@@ -127,15 +163,15 @@ export function CodeEditor({ app, blur, onClose }) {
       `}
     >
       <div className='acode-head'>
-        <FileCode2Icon size={16} />
         <div className='acode-head-title'>Code</div>
         <div className='acode-head-close' onClick={() => world.ui.toggleCode()}>
           <XIcon size={20} />
         </div>
       </div>
       <div className='acode-content'>
-        <div className='acode-container' ref={containerRef} />
+        <div className='acode-mount' ref={mountRef} />
       </div>
+      <div className='acode-resizer' ref={resizeRef} />
     </div>
   )
 }

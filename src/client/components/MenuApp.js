@@ -17,7 +17,7 @@ import {
 import { exportApp } from '../../core/extras/appTools'
 import { downloadFile } from '../../core/extras/downloadFile'
 import { hashFile } from '../../core/utils-client'
-import { isBoolean } from 'lodash-es'
+import { isArray, isBoolean } from 'lodash-es'
 import { css } from '@firebolt-dev/css'
 
 export function MenuApp({ world, app, blur }) {
@@ -97,7 +97,13 @@ function MenuAppIndex({ world, app, blueprint, pop, push }) {
       <MenuItemFields world={world} app={app} blueprint={blueprint} />
       {app.fields?.length > 0 && <MenuLine />}
       {!frozen && (
-        <MenuItemFileBtn label='Model' hint='Change the model for this app' accept='.glb,.vrm' onChange={changeModel} />
+        <MenuItemFileBtn
+          label='Model'
+          hint='Change the model for this app'
+          accept='.glb,.vrm'
+          value={blueprint.model}
+          onChange={changeModel}
+        />
       )}
       {!frozen && <MenuItemBtn label='Code' hint='View or edit the code for this app' onClick={world.ui.toggleCode} />}
       {!frozen && <MenuItemBtn label='Flags' hint='View/edit flags for this app' onClick={() => push('flags')} nav />}

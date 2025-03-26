@@ -385,12 +385,18 @@ export class ServerNetwork extends System {
   }
 
   onBlueprintAdded = (socket, blueprint) => {
+    if (!this.isBuilder(socket.player)) {
+      return console.error('player attempted to add blueprint without builder permission')
+    }
     this.world.blueprints.add(blueprint)
     this.send('blueprintAdded', blueprint, socket.id)
     this.dirtyBlueprints.add(blueprint.id)
   }
 
   onBlueprintModified = (socket, data) => {
+    if (!this.isBuilder(socket.player)) {
+      return console.error('player attempted to modify blueprint without builder permission')
+    }
     const blueprint = this.world.blueprints.get(data.id)
     // if new version is greater than current version, allow it
     if (data.version > blueprint.version) {
@@ -405,16 +411,15 @@ export class ServerNetwork extends System {
   }
 
   onEntityAdded = (socket, data) => {
-    if (!this.isBuilder(socket.player))
+    if (!this.isBuilder(socket.player)) {
       return console.error('player attempted to add entity without builder permission')
+    }
     const entity = this.world.entities.add(data)
     this.send('entityAdded', data, socket.id)
     if (entity.isApp) this.dirtyApps.add(entity.data.id)
   }
 
   onEntityModified = async (socket, data) => {
-    if (!this.isBuilder(socket.player))
-      return console.error('player attempted to modify entity without builder permission')
     const entity = this.world.entities.get(data.id)
     if (!entity) return console.error('onEntityModified: no entity found', data)
     entity.modify(data)
@@ -449,7 +454,7 @@ export class ServerNetwork extends System {
 
   onEntityRemoved = (socket, id) => {
     if (!this.isBuilder(socket.player))
-      return console.error('player attempted to emove entity without builder permission')
+      return console.error('player attempted to remove entity without builder permission')
     const entity = this.world.entities.get(id)
     this.world.entities.remove(id)
     this.send('entityRemoved', id, socket.id)
