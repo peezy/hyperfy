@@ -60,11 +60,13 @@ function MenuMainUI({ world, pop, push }) {
   const player = world.entities.player
   const [ui, setUI] = useState(world.prefs.ui)
   const [actions, setActions] = useState(world.prefs.actions)
+  const [stats, setStats] = useState(world.prefs.stats)
   const { isBuilder } = usePermissions(world)
   useEffect(() => {
     const onChange = changes => {
       if (changes.ui) setUI(changes.ui.value)
       if (changes.actions) setActions(changes.actions.value)
+      if (changes.stats) setStats(changes.stats.value)
     }
     world.prefs.on('change', onChange)
     return () => {
@@ -87,12 +89,16 @@ function MenuMainUI({ world, pop, push }) {
         <MenuItemToggle
           label='Build Prompts'
           hint='Show or hide action prompts when in build mode'
-          trueLabel='Show'
-          falseLabel='Hide'
           value={actions}
           onChange={actions => world.prefs.setActions(actions)}
         />
       )}
+      <MenuItemToggle
+        label='Stats'
+        hint='Show or hide performance stats'
+        value={world.prefs.stats}
+        onChange={stats => world.prefs.setStats(stats)}
+      />
     </Menu>
   )
 }

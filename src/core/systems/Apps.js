@@ -122,9 +122,12 @@ export class Apps extends System {
       raycast(entity, origin, direction, maxDistance, layerMask) {
         if (!origin?.isVector3) throw new Error('[raycast] origin must be Vector3')
         if (!direction?.isVector3) throw new Error('[raycast] direction must be Vector3')
-        if (maxDistance !== undefined && !isNumber(maxDistance)) throw new Error('[raycast] maxDistance must be number')
-        if (layerMask !== undefined && layerMask !== null && !isNumber(layerMask))
+        if (maxDistance !== undefined && maxDistance !== null && !isNumber(maxDistance)) {
+          throw new Error('[raycast] maxDistance must be number')
+        }
+        if (layerMask !== undefined && layerMask !== null && !isNumber(layerMask)) {
           throw new Error('[raycast] layerMask must be number')
+        }
         const hit = world.physics.raycast(origin, direction, maxDistance, layerMask)
         if (!hit) return null
         if (!self.raycastHit) {
@@ -157,28 +160,28 @@ export class Apps extends System {
       },
       open(entity, url, newWindow = false) {
         if (!url) {
-          console.error('[world.open] URL is required');
-          return;
+          console.error('[world.open] URL is required')
+          return
         }
-        
+
         if (world.network.isClient) {
           try {
-            const resolvedUrl = world.resolveURL(url);
-            
+            const resolvedUrl = world.resolveURL(url)
+
             setTimeout(() => {
               if (newWindow) {
-                window.open(resolvedUrl, '_blank');
+                window.open(resolvedUrl, '_blank')
               } else {
-                window.location.href = resolvedUrl;
+                window.location.href = resolvedUrl
               }
-            }, 0);
-            
-            console.log(`[world.open] Redirecting to: ${resolvedUrl} ${newWindow ? '(new window)' : ''}`);
+            }, 0)
+
+            console.log(`[world.open] Redirecting to: ${resolvedUrl} ${newWindow ? '(new window)' : ''}`)
           } catch (e) {
-            console.error('[world.open] Failed to open URL:', e);
+            console.error('[world.open] Failed to open URL:', e)
           }
         } else {
-          console.warn('[world.open] URL redirection only works on client side');
+          console.warn('[world.open] URL redirection only works on client side')
         }
       },
     }

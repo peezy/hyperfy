@@ -2,8 +2,9 @@ import { System } from './System'
 
 import StatsGL from '../libs/stats-gl'
 import Panel from '../libs/stats-gl/panel'
+import { isBoolean } from 'lodash-es'
 
-const PING_RATE = 1 / 3
+const PING_RATE = 1 / 2
 
 /**
  * Stats System
@@ -28,37 +29,36 @@ export class ClientStats extends System {
     this.ui = ui
   }
 
-  enable() {
-    if (!this.stats) {
-      this.stats = new StatsGL({
-        logsPerSecond: 20,
-        samplesLog: 100,
-        samplesGraph: 10,
-        precision: 2,
-        horizontal: true,
-        minimal: false,
-        mode: 0,
-      })
-      this.stats.init(this.world.graphics.renderer, false)
-      this.stats.dom.style.position = 'absolute'
-      this.ping = new Panel('PING', '#f00', '#200')
-      this.stats.addPanel(this.ping, 3)
+  start() {
+    this.world.prefs.on('change', this.onPrefsChange)
+    if (this.world.prefs.stats) {
+      this.toggle(true)
     }
-    this.ui.appendChild(this.stats.dom)
-    this.active = true
   }
 
-  disable() {
-    if (!this.active) return
-    this.ui.removeChild(this.stats.dom)
-    this.active = false
-  }
-
-  toggle() {
+  toggle(value) {
+    value = isBoolean(value) ? value : !this.active
+    if (this.active === value) return
+    this.active = value
     if (this.active) {
-      this.disable()
+      if (!this.stats) {
+        this.stats = new StatsGL({
+          logsPerSecond: 20,
+          samplesLog: 100,
+          samplesGraph: 10,
+          precision: 2,
+          horizontal: true,
+          minimal: false,
+          mode: 0,
+        })
+        this.stats.init(this.world.graphics.renderer, false)
+        this.stats.dom.style.position = 'absolute'
+        this.ping = new Panel('PING', '#f00', '#200')
+        this.stats.addPanel(this.ping, 3)
+      }
+      this.ui.appendChild(this.stats.dom)
     } else {
-      this.enable()
+      this.ui.removeChild(this.stats.dom)
     }
   }
 
@@ -131,5 +131,11 @@ export class ClientStats extends System {
     //     max: max,
     //   })
     // }
+  }
+
+  onPrefsChange = changes => {
+    if (changes.stats) {
+      this.toggle(changes.stats.value)
+    }
   }
 }

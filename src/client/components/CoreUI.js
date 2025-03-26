@@ -168,10 +168,11 @@ function Side({ world, menu }) {
     // check for client commands
     if (msg.startsWith('/')) {
       const [cmd, arg1, arg2] = msg.slice(1).split(' ')
-      if (cmd === 'stats') {
-        world.stats.toggle()
-        return
-      }
+      // removed: stats are now in the UI menu, leaving here for reference
+      // if (cmd === 'stats') {
+      //   world.stats.toggle()
+      //   return
+      // }
     }
     // otherwise post it
     const player = world.entities.player

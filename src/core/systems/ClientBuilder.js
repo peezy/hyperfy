@@ -126,7 +126,7 @@ export class ClientBuilder extends System {
     // inspect in pointer-lock
     if (!this.selected && this.control.keyR.pressed) {
       const entity = this.getEntityAtReticle()
-      if (entity) {
+      if (entity?.isApp) {
         this.select(null)
         this.control.pointer.unlock()
         this.world.ui.setMenu({ type: 'app', app: entity })
@@ -135,7 +135,7 @@ export class ClientBuilder extends System {
     // inspect out of pointer-lock
     if (!this.selected && !this.control.pointer.locked && this.control.mouseRight.pressed) {
       const entity = this.getEntityAtPointer()
-      if (entity) {
+      if (entity?.isApp) {
         this.select(null)
         this.control.pointer.unlock()
         this.world.ui.setMenu({ type: 'app', app: entity })

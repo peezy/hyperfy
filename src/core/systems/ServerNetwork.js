@@ -371,7 +371,7 @@ export class ServerNetwork extends System {
       if (cmd === 'chat') {
         const code = arg1
         if (code !== 'clear') return
-        if (!isBuilder(socket.player)) {
+        if (!this.isBuilder(socket.player)) {
           return
         }
         this.world.chat.clear(true)
