@@ -25,7 +25,6 @@ export const useSolanaSystem = world => {
     }
 
     // Initialize the Solana system on the world object
-    debug()
     world.solana = {
       wallet,
       connection,

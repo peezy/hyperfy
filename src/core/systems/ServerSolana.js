@@ -16,13 +16,13 @@ export class Solana extends System {
     super(world)
 
     this.connection = new Connection(process.env.PUBLIC_RPC_URL, 'confirmed')
-    
+
     // Determine if we're in watch mode or active mode
     // this.mode = options.mode || 'active'
     this.mode = process.env.SOLANA_PKEY_ARRAY ? 'active' : 'watch'
 
     console.log(`initializing solana system on mode ${this.mode}`)
-    
+
     if (this.mode === 'active') {
       // Active mode - server has a wallet with private key that can sign transactions
       this.wallet = Keypair.fromSecretKey(Buffer.from(JSON.parse(process.env.SOLANA_PKEY_ARRAY)))
@@ -216,7 +216,7 @@ export class Solana extends System {
     const umi = createUmi(process.env.PUBLIC_RPC_URL).use(mplTokenMetadata())
 
     const tokens = new Map()
-    this.programs = {
+    this.api = {
       token: async tokenMint => {
         try {
           let token = tokens.get(tokenMint)
@@ -241,6 +241,10 @@ export class Solana extends System {
         } catch (error) {
           console.error(error)
         }
+      },
+      getBalance: async () => {
+        const balance = await this.connection.getBalance(this.publicKey)
+        return (balance / 1e9).toFixed(4)
       },
     }
   }
