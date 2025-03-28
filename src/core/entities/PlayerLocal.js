@@ -67,7 +67,7 @@ export class PlayerLocal extends Entity {
     this.pushForce = null
     this.pushForceInit = false
 
-    this.doubleJumpEnabled = false
+    this.doubleJumpEnabled = true
     this.zoomEnabled = true
 
     this.slipping = false
