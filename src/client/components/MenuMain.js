@@ -233,18 +233,18 @@ function MenuMainAudio({ world, pop, push }) {
 function MenuMainWorld({ world, pop, push }) {
   const player = world.entities.player
   const { isAdmin } = usePermissions(world)
-  const [model, setModel] = useState(world.config.model)
-  const [avatar, setAvatar] = useState(world.config.avatar)
-  const [publicc, setPublic] = useState(world.config.public)
+  const [model, setModel] = useState(world.settings.model)
+  const [avatar, setAvatar] = useState(world.settings.avatar)
+  const [publicc, setPublic] = useState(world.settings.public)
   useEffect(() => {
     const onChange = changes => {
       if (changes.model) setModel(changes.model.value)
       if (changes.avatar) setAvatar(changes.avatar.value)
       if (changes.public) setPublic(changes.public.value)
     }
-    world.config.on('change', onChange)
+    world.settings.on('change', onChange)
     return () => {
-      world.config.off('change', onChange)
+      world.settings.off('change', onChange)
     }
   }, [])
   return (
@@ -255,7 +255,7 @@ function MenuMainWorld({ world, pop, push }) {
         hint='Change the global environment model'
         kind='model'
         value={model}
-        onChange={value => world.config.set('model', value, true)}
+        onChange={value => world.settings.set('model', value, true)}
         world={world}
       />
       <MenuItemFile
@@ -263,7 +263,7 @@ function MenuMainWorld({ world, pop, push }) {
         hint='Change the default avatar everyone spawns into the world with'
         kind='avatar'
         value={avatar}
-        onChange={value => world.config.set('avatar', value, true)}
+        onChange={value => world.settings.set('avatar', value, true)}
         world={world}
       />
       {isAdmin && (
@@ -271,7 +271,7 @@ function MenuMainWorld({ world, pop, push }) {
           label='Public'
           hint='Allow everyone to build (and destroy) things in the world. When disabled only admins can build.'
           value={publicc}
-          onChange={value => world.config.set('public', value, true)}
+          onChange={value => world.settings.set('public', value, true)}
         />
       )}
       <MenuItemBtn

@@ -96,13 +96,13 @@ export class ClientNetwork extends System {
     this.world.assetsUrl = data.assetsUrl
 
     // preload environment model and avatar
-    if (data.config.model) {
-      this.world.loader.preload('model', data.config.model.url)
+    if (data.settings.model) {
+      this.world.loader.preload('model', data.settings.model.url)
     } else {
       this.world.loader.preload('model', this.world.environment.base.model)
     }
-    if (data.config.avatar) {
-      this.world.loader.preload('avatar', data.config.avatar.url)
+    if (data.settings.avatar) {
+      this.world.loader.preload('avatar', data.settings.avatar.url)
     }
     // preload some blueprints
     for (const item of data.blueprints) {
@@ -133,7 +133,7 @@ export class ClientNetwork extends System {
     }
     this.world.loader.execPreload()
 
-    this.world.config.deserialize(data.config)
+    this.world.settings.deserialize(data.settings)
     this.world.chat.deserialize(data.chat)
     this.world.blueprints.deserialize(data.blueprints)
     this.world.entities.deserialize(data.entities)

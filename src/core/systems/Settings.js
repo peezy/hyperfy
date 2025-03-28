@@ -1,6 +1,6 @@
 import { System } from './System'
 
-export class Config extends System {
+export class Settings extends System {
   constructor(world) {
     super(world)
 
@@ -48,7 +48,7 @@ export class Config extends System {
   set(key, value, broadcast) {
     this.modify(key, value)
     if (broadcast) {
-      this.world.network.send('configModified', { key, value })
+      this.world.network.send('settingsModified', { key, value })
     }
   }
 }

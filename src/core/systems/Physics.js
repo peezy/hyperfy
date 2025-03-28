@@ -269,7 +269,9 @@ export class Physics extends System {
       handle.interpolation.curr.quaternion.copy(pose.q)
     }
     this.handles.set(actor.ptr, handle)
-    this.scene.addActor(actor)
+    if (!handle.controller) {
+      this.scene.addActor(actor)
+    }
     return {
       move: matrix => {
         if (this.ignoreSetGlobalPose) {
@@ -319,7 +321,9 @@ export class Physics extends System {
           }
         }
         // remove from scene
-        this.scene.removeActor(actor)
+        if (!handle.controller) {
+          this.scene.removeActor(actor)
+        }
         // delete data
         this.handles.delete(actor.ptr)
       },
@@ -347,6 +351,7 @@ export class Physics extends System {
         continue
       }
       const lerp = handle.interpolation
+      if (!lerp) continue
       lerp.prev.position.copy(lerp.next.position)
       lerp.prev.quaternion.copy(lerp.next.quaternion)
       const pose = handle.actor.getGlobalPose()

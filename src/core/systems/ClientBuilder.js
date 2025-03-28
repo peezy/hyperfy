@@ -73,7 +73,7 @@ export class ClientBuilder extends System {
   }
 
   canBuild() {
-    return this.world.config.public || hasRole(this.world.entities.player?.data.roles, 'admin')
+    return this.world.settings.public || hasRole(this.world.entities.player?.data.roles, 'admin')
   }
 
   updateActions() {
@@ -701,6 +701,9 @@ export class ClientBuilder extends System {
           // revert
           player.modify({ avatar: prevUrl })
           return
+        }
+        if (player.data.avatar !== url) {
+          return // player equipped a new vrm while this one was uploading >.>
         }
         // update for everyone
         this.world.network.send('entityModified', {

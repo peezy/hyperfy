@@ -249,9 +249,7 @@ function MenuItemField({ world, props, field, value, modify }) {
     )
   }
   if (field.type === 'button') {
-    return (
-      <MenuItemBtn label={field.label} hint={field.hint} value={value} onChange={value => modify(field.key, value)} />
-    )
+    return <MenuItemBtn label={field.label} hint={field.hint} onClick={field.onClick} />
   }
   return null
 }

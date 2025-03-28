@@ -307,6 +307,7 @@ export class Audio extends Node {
   }
 
   async play() {
+    if (!this.ctx.world) return // not mounted
     const loader = this.ctx.world.loader
     const audio = this.ctx.world.audio
     if (!audio) return

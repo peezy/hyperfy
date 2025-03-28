@@ -282,7 +282,7 @@ export class PlayerLocal extends Entity {
   }
 
   toggleFlying() {
-    const canFly = this.world.config.public || hasRole(this.data.roles, 'admin')
+    const canFly = this.world.settings.public || hasRole(this.data.roles, 'admin')
     if (!canFly) return
     this.flying = !this.flying
     if (this.flying) {

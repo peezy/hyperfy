@@ -45,7 +45,7 @@ export class UIImage extends Node {
   }
 
   draw(ctx, offsetLeft, offsetTop) {
-    if (this._display === 'none' || !this.img) return
+    if (this._display === 'none') return
     const left = offsetLeft + this.yogaNode.getComputedLeft()
     const top = offsetTop + this.yogaNode.getComputedTop()
     const width = this.yogaNode.getComputedWidth()

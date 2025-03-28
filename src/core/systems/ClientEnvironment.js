@@ -77,13 +77,13 @@ export class ClientEnvironment extends System {
     this.buildCSM()
     this.updateSky()
 
-    this.world.config.on('change', this.onConfigChange)
+    this.world.settings.on('change', this.onSettingsChange)
     this.world.prefs.on('change', this.onPrefsChange)
     this.world.graphics.on('resize', this.onViewportResize)
   }
 
   async updateModel() {
-    const url = this.world.config.model?.url || this.base.model
+    const url = this.world.settings.model?.url || this.base.model
     let glb = this.world.loader.get('model', url)
     if (!glb) glb = await this.world.loader.load('model', url)
     if (this.model) this.model.deactivate()
@@ -246,7 +246,7 @@ export class ClientEnvironment extends System {
     }
   }
 
-  onConfigChange = changes => {
+  onSettingsChange = changes => {
     if (changes.model) {
       this.updateModel()
     }

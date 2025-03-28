@@ -55,17 +55,16 @@ export class ServerNetwork extends System {
       data.state = {}
       this.world.entities.add(data, true)
     }
-    // hydrate config
-    let config = await this.db('config').where('key', 'config').first()
+    // hydrate settings
+    let settingsRow = await this.db('config').where('key', 'settings').first()
     try {
-      config = JSON.parse(config.value)
+      const settings = JSON.parse(settingsRow?.value || '{}')
+      this.world.settings.deserialize(settings)
     } catch (err) {
       console.error(err)
-      config = {}
     }
-    this.world.config.deserialize(config)
-    // watch config changes
-    this.world.config.on('change', this.saveConfig)
+    // watch settings changes
+    this.world.settings.on('change', this.saveSettings)
     // queue first save
     if (SAVE_INTERVAL) {
       this.saveTimerId = setTimeout(this.save, SAVE_INTERVAL * 1000)
@@ -191,12 +190,12 @@ export class ServerNetwork extends System {
     this.saveTimerId = setTimeout(this.save, SAVE_INTERVAL * 1000)
   }
 
-  saveConfig = async () => {
-    const data = this.world.config.serialize()
+  saveSettings = async () => {
+    const data = this.world.settings.serialize()
     const value = JSON.stringify(data)
     await this.db('config')
       .insert({
-        key: 'config',
+        key: 'settings',
         value,
       })
       .onConflict('key')
@@ -210,7 +209,7 @@ export class ServerNetwork extends System {
   }
 
   isBuilder(player) {
-    return this.world.config.public || this.isAdmin(player)
+    return this.world.settings.public || this.isAdmin(player)
   }
 
   async onConnection(ws, authToken) {
@@ -266,7 +265,7 @@ export class ServerNetwork extends System {
           userId: user.id, // deprecated, same as userId
           name: user.name,
           health: HEALTH_MAX,
-          avatar: user.avatar || this.world.config.avatar?.url || 'asset://avatar.vrm',
+          avatar: user.avatar || this.world.settings.avatar?.url || 'asset://avatar.vrm',
           roles: user.roles,
         },
         true
@@ -279,7 +278,7 @@ export class ServerNetwork extends System {
         assetsUrl: process.env.PUBLIC_ASSETS_URL,
         apiUrl: process.env.PUBLIC_API_URL,
         maxUploadSize: process.env.PUBLIC_MAX_UPLOAD_SIZE,
-        config: this.world.config.serialize(),
+        settings: this.world.settings.serialize(),
         chat: this.world.chat.serialize(),
         blueprints: this.world.blueprints.serialize(),
         entities: this.world.entities.serialize(),
@@ -348,25 +347,8 @@ export class ServerNetwork extends System {
       }
       if (cmd === 'spawn') {
         const player = socket.player
-        if (!this.isBuilder(socket.player)) return
-        const action = arg1
-        if (action === 'set') {
-          this.spawn = { position: player.data.position.slice(), quaternion: player.data.quaternion.slice() }
-        } else if (action === 'clear') {
-          this.spawn = { position: [0, 0, 0], quaternion: [0, 0, 0, 1] }
-        } else {
-          return
-        }
-        const data = JSON.stringify(this.spawn)
-        await this.db('config')
-          .insert({
-            key: 'spawn',
-            value: data,
-          })
-          .onConflict('key')
-          .merge({
-            value: data,
-          })
+        const op = arg1
+        this.onSpawnModified(socket, op)
       }
       if (cmd === 'chat') {
         const code = arg1
@@ -461,11 +443,11 @@ export class ServerNetwork extends System {
     if (entity.isApp) this.dirtyApps.add(id)
   }
 
-  onConfigModified = (socket, data) => {
+  onSettingsModified = (socket, data) => {
     if (!this.isBuilder(socket.player))
-      return console.error('player attempted to modify config without builder permission')
-    this.world.config.set(data.key, data.value)
-    this.send('configModified', data, socket.id)
+      return console.error('player attempted to modify settings without builder permission')
+    this.world.settings.set(data.key, data.value)
+    this.send('settingsModified', data, socket.id)
   }
 
   onSpawnModified = async (socket, op) => {

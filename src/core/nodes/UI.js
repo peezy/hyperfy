@@ -224,7 +224,7 @@ export class UI extends Node {
     if (this._backgroundColor) {
       // when theres a border, slightly inset to prevent bleeding
       const inset = this._borderColor && this._borderWidth ? 1 * this._res : 0
-      const radius = this._borderRadius * this._res - inset
+      const radius = Math.max(0, this._borderRadius * this._res - inset)
       const insetLeft = left + inset
       const insetTop = top + inset
       const insetWidth = width - inset * 2
