@@ -967,12 +967,11 @@ function Reticle({ world }) {
         justify-content: center;
         font-size: 1rem;
         .reticle-item {
-          width: 1.25rem;
-          height: 1.25rem;
-          border-radius: 0.625rem;
-          border: 0.125rem solid ${buildMode ? '#ff4d4d' : 'white'};
+          width: 2px;
+          height: 2px;
+          border-radius: 10px;
+          border: 2px solid ${buildMode ? '#ff4d4d' : 'white'};
           mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
-        }
       `}
     >
       <div className='reticle-item' />
