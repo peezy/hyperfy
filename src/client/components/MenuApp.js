@@ -24,6 +24,7 @@ export function MenuApp({ world, app, blur }) {
   const [pages, setPages] = useState(() => ['index'])
   const [blueprint, setBlueprint] = useState(app.blueprint)
   useEffect(() => {
+    window.app = app
     const onModify = bp => {
       if (bp.id === blueprint.id) setBlueprint(bp)
     }
@@ -132,13 +133,14 @@ function MenuItemFields({ world, app, blueprint }) {
   }, [])
   const modify = (key, value) => {
     if (props[key] === value) return
-    props[key] = value
+    const bp = world.blueprints.get(blueprint.id)
+    const newProps = { ...bp.props, [key]: value }
     // update blueprint locally (also rebuilds apps)
-    const id = blueprint.id
-    const version = blueprint.version + 1
-    world.blueprints.modify({ id, version, props })
+    const id = bp.id
+    const version = bp.version + 1
+    world.blueprints.modify({ id, version, props: newProps })
     // broadcast blueprint change to server + other clients
-    world.network.send('blueprintModified', { id, version, props })
+    world.network.send('blueprintModified', { id, version, props: newProps })
   }
   return fields.map(field => (
     <MenuItemField key={field.key} world={world} props={props} field={field} value={props[field.key]} modify={modify} />
