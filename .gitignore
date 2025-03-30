@@ -7,3 +7,5 @@ node_modules/
 build/
 /world*
 fly.toml
+apps
+tps
