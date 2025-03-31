@@ -48,6 +48,9 @@ export function createPlayerProxy(player) {
     get height() {
       return player.avatar?.getHeight()
     },
+    get headToHeight() {
+      return player.avatar?.getHeadToHeight()
+    },
     get destroyed() {
       return !!player.destroyed
     },
