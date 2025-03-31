@@ -307,18 +307,23 @@ export class ClientBuilder extends System {
     if (this.control.keyZ.pressed && (this.control.metaLeft.down || this.control.controlLeft.down)) {
       this.undo()
     }
-    // translate/rotate updates
-    if (this.selected && (this.mode === 'translate' || this.mode === 'rotate')) {
+    // translate updates
+    if (this.selected && this.mode === 'translate' && this.gizmoActive) {
       const app = this.selected
       app.root.position.copy(this.gizmoTarget.position)
       app.root.quaternion.copy(this.gizmoTarget.quaternion)
-      // snap rotation to degrees
-      if (!this.control.controlLeft.down) {
-        const newY = this.gizmoTarget.rotation.y
-        const degrees = newY / DEG2RAD
-        const snappedDegrees = Math.round(degrees / SNAP_DEGREES) * SNAP_DEGREES
-        app.root.rotation.y = snappedDegrees * DEG2RAD
-      }
+    }
+    // rotate updates
+    if (this.selected && this.mode === 'rotate' && this.control.controlLeft.pressed) {
+      this.gizmo.rotationSnap = null
+    }
+    if (this.selected && this.mode === 'rotate' && this.control.controlLeft.released) {
+      this.gizmo.rotationSnap = SNAP_DEGREES * DEG2RAD
+    }
+    if (this.selected && this.mode === 'rotate' && this.gizmoActive) {
+      const app = this.selected
+      app.root.position.copy(this.gizmoTarget.position)
+      app.root.quaternion.copy(this.gizmoTarget.quaternion)
     }
     // grab updates
     if (this.selected && this.mode === 'grab') {
@@ -460,7 +465,7 @@ export class ClientBuilder extends System {
       if (!this.gizmo) {
         this.gizmo = new TransformControls(this.world.camera, this.viewport)
         this.gizmo.setSize(0.7)
-        this.gizmo.space = 'world'
+        this.gizmo.space = this.localSpace ? 'local' : 'world'
         this.gizmo._gizmo.helper.translate.scale.setScalar(0)
         this.gizmo._gizmo.helper.rotate.scale.setScalar(0)
         this.gizmo._gizmo.helper.scale.scale.setScalar(0)
@@ -479,6 +484,7 @@ export class ClientBuilder extends System {
         this.gizmoTarget.quaternion.copy(app.root.quaternion)
         this.world.stage.scene.add(this.gizmoTarget)
         this.world.stage.scene.add(this.gizmoHelper)
+        this.gizmo.rotationSnap = SNAP_DEGREES * DEG2RAD
         this.gizmo.attach(this.gizmoTarget)
         this.gizmo.mode = mode
       }
@@ -535,7 +541,7 @@ export class ClientBuilder extends System {
         if (!this.gizmo) {
           this.gizmo = new TransformControls(this.world.camera, this.viewport)
           this.gizmo.setSize(0.7)
-          this.gizmo.space = 'local'
+          this.gizmo.space = this.localSpace ? 'local' : 'world'
           this.gizmo._gizmo.helper.translate.scale.setScalar(0)
           this.gizmo._gizmo.helper.rotate.scale.setScalar(0)
           this.gizmo._gizmo.helper.scale.scale.setScalar(0)
@@ -552,6 +558,7 @@ export class ClientBuilder extends System {
         this.gizmoTarget.quaternion.copy(app.root.quaternion)
         this.world.stage.scene.add(this.gizmoTarget)
         this.world.stage.scene.add(this.gizmoHelper)
+        this.gizmo.rotationSnap = SNAP_DEGREES * DEG2RAD
         this.gizmo.attach(this.gizmoTarget)
         this.gizmo.mode = this.mode
       }
