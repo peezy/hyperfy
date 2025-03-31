@@ -590,7 +590,7 @@ function Actions({ world }) {
     >
       {actions.map(action => (
         <div className='actions-item' key={action.id}>
-          <div className='actions-item-icon'>{getActionIcon(action.type)}</div>
+          <div className='actions-item-icon'>{getActionIcon(action)}</div>
           <div className='actions-item-label'>{action.label}</div>
         </div>
       ))}
@@ -598,21 +598,24 @@ function Actions({ world }) {
   )
 }
 
-function getActionIcon(type) {
-  if (type === 'controlLeft') {
+function getActionIcon(action) {
+  if (action.type === 'custom') {
+    return <ActionPill label={action.btn} />
+  }
+  if (action.type === 'controlLeft') {
     return <ActionPill label='Ctrl' />
   }
-  if (type === 'mouseLeft') {
+  if (action.type === 'mouseLeft') {
     return <ActionIcon icon={MouseLeftIcon} />
   }
-  if (type === 'mouseRight') {
+  if (action.type === 'mouseRight') {
     return <ActionIcon icon={MouseRightIcon} />
   }
-  if (type === 'mouseWheel') {
+  if (action.type === 'mouseWheel') {
     return <ActionIcon icon={MouseWheelIcon} />
   }
-  if (buttons.has(type)) {
-    return <ActionPill label={propToLabel[type]} />
+  if (buttons.has(action.type)) {
+    return <ActionPill label={propToLabel[action.type]} />
   }
   return <ActionPill label='?' />
 }

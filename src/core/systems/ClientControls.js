@@ -295,9 +295,11 @@ export class ClientControls extends System {
       const actions = control.actions
       if (actions) {
         for (const action of actions) {
-          // ignore if existing
-          const idx = this.actions.findIndex(a => a.type === action.type)
-          if (idx !== -1) continue
+          // ignore if already existing
+          if (!action.type === 'custom') {
+            const idx = this.actions.findIndex(a => a.type === action.type)
+            if (idx !== -1) continue
+          }
           this.actions.push(action)
         }
       }

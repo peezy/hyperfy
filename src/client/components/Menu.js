@@ -22,6 +22,9 @@ export function Menu({ title, blur, children }) {
           .menu-head {
             background: #0f1018;
             padding: 1rem;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            overflow: hidden;
             span {
               font-size: 1.3rem;
               font-weight: 600;

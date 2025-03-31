@@ -1,6 +1,7 @@
 import moment from 'moment'
 import * as THREE from '../extras/three'
 import { cloneDeep, isBoolean } from 'lodash-es'
+import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
 
 import { System } from './System'
 
@@ -21,6 +22,12 @@ const v1 = new THREE.Vector3()
 const q1 = new THREE.Quaternion()
 const e1 = new THREE.Euler()
 
+const modeLabels = {
+  grab: 'Grab',
+  translate: 'Translate',
+  rotate: 'Rotate',
+}
+
 /**
  * Builder System
  *
@@ -33,8 +40,8 @@ export class ClientBuilder extends System {
   constructor(world) {
     super(world)
     this.enabled = false
-
     this.selected = null
+    this.mode = 'grab'
     this.target = new THREE.Object3D()
     this.target.rotation.reorder('YXZ')
     this.lastMoveSendTime = 0
@@ -84,22 +91,30 @@ export class ClientBuilder extends System {
       }
     }
     if (this.enabled && !this.selected) {
-      actions.push({ type: 'mouseLeft', label: 'Grab' })
-      actions.push({ type: 'mouseRight', label: 'Duplicate' })
-      actions.push({ type: 'keyR', label: 'Inspect' })
+      actions.push({ type: 'mouseLeft', label: modeLabels[this.mode] })
+      actions.push({ type: 'mouseRight', label: 'Inspect' })
+      actions.push({ type: 'custom', btn: '123', label: 'Grab / Translate / Rotate' })
+      actions.push({ type: 'keyR', label: 'Duplicate' })
       actions.push({ type: 'keyP', label: 'Pin' })
       actions.push({ type: 'keyX', label: 'Destroy' })
       actions.push({ type: 'space', label: 'Jump / Fly (Double-Tap)' })
       actions.push({ type: 'tab', label: 'Exit Build Mode' })
     }
     if (this.enabled && this.selected) {
-      actions.push({ type: 'mouseLeft', label: 'Place' })
-      actions.push({ type: 'mouseWheel', label: 'Rotate' })
-      actions.push({ type: 'mouseRight', label: 'Duplicate' })
-      actions.push({ type: 'keyF', label: 'Push' })
-      actions.push({ type: 'keyC', label: 'Pull' })
+      actions.push({ type: 'mouseLeft', label: this.mode === 'grab' ? 'Place' : 'Select / Transform' })
+      if (this.mode === 'grab') {
+        actions.push({ type: 'mouseWheel', label: 'Rotate' })
+      }
+      actions.push({ type: 'mouseRight', label: 'Inspect' })
+      actions.push({ type: 'custom', btn: '123', label: 'Grab / Translate / Rotate' })
+      if (this.mode === 'grab') {
+        actions.push({ type: 'keyF', label: 'Push' })
+        actions.push({ type: 'keyC', label: 'Pull' })
+      }
       actions.push({ type: 'keyX', label: 'Destroy' })
-      actions.push({ type: 'controlLeft', label: 'No Snap (Hold)' })
+      if (this.mode === 'grab') {
+        actions.push({ type: 'controlLeft', label: 'No Snap (Hold)' })
+      }
       actions.push({ type: 'space', label: 'Jump / Fly (Double-Tap)' })
       actions.push({ type: 'tab', label: 'Exit Build Mode' })
     }
@@ -124,7 +139,7 @@ export class ClientBuilder extends System {
       return
     }
     // inspect in pointer-lock
-    if (!this.selected && this.control.keyR.pressed) {
+    if (this.control.mouseRight.pressed && this.control.pointer.locked) {
       const entity = this.getEntityAtReticle()
       if (entity?.isApp) {
         this.select(null)
@@ -142,8 +157,8 @@ export class ClientBuilder extends System {
       }
     }
     // unlink
-    if (this.control.keyU.pressed) {
-      const entity = this.getEntityAtReticle()
+    if (this.control.keyU.pressed && this.control.pointer.locked) {
+      const entity = this.selected || this.getEntityAtReticle()
       if (entity?.isApp) {
         this.select(null)
         // duplicate the blueprint
@@ -173,8 +188,8 @@ export class ClientBuilder extends System {
       }
     }
     // pin/unpin
-    if (!this.selected && this.control.keyP.pressed) {
-      const entity = this.getEntityAtReticle()
+    if (this.control.keyP.pressed && this.control.pointer.locked) {
+      const entity = this.selected || this.getEntityAtReticle()
       if (entity?.isApp) {
         entity.data.pinned = !entity.data.pinned
         this.world.network.send('entityModified', {
@@ -182,29 +197,45 @@ export class ClientBuilder extends System {
           pinned: entity.data.pinned,
         })
         this.world.emit('toast', entity.data.pinned ? 'Pinned' : 'Un-pinned')
+        this.select(null)
       }
     }
-    // grab
-    if (!this.justPointerLocked && this.control.pointer.locked && this.control.mouseLeft.pressed && !this.selected) {
-      const entity = this.getEntityAtReticle()
-      if (entity?.isApp && !entity.data.pinned) {
-        this.addUndo({
-          name: 'move-entity',
-          entityId: entity.data.id,
-          position: entity.data.position.slice(),
-        })
-        this.select(entity)
+    // grab mode
+    if (this.control.digit1.pressed) {
+      this.setMode('grab')
+    }
+    // translate mode
+    if (this.control.digit2.pressed) {
+      this.setMode('translate')
+    }
+    // rotate mode
+    if (this.control.digit3.pressed) {
+      this.setMode('rotate')
+    }
+    // left-click place/select/reselect/deselect
+    if (!this.justPointerLocked && this.control.pointer.locked && this.control.mouseLeft.pressed) {
+      // if nothing selected, attempt to select
+      if (!this.selected) {
+        const entity = this.getEntityAtReticle()
+        if (entity?.isApp && !entity.data.pinned) this.select(entity)
+      }
+      // if selected in grab mode, place
+      else if (this.selected && this.mode === 'grab') {
+        this.select(null)
+      }
+      // if selected in translate/rotate mode, re-select/deselect
+      else if (this.selected && (this.mode === 'translate' || this.mode === 'rotate') && !this.gizmoActive) {
+        const entity = this.getEntityAtReticle()
+        if (entity?.isApp) this.select(entity)
+        else this.select(null)
       }
     }
-    // place
-    else if (
-      (!this.control.pointer.locked && this.selected) ||
-      (this.control.pointer.locked && this.control.mouseLeft.pressed && this.selected)
-    ) {
+    // deselect on pointer unlock
+    if (this.selected && !this.control.pointer.locked) {
       this.select(null)
     }
     // duplicate
-    if (!this.justPointerLocked && this.control.pointer.locked && this.control.mouseRight.pressed) {
+    if (!this.justPointerLocked && this.control.pointer.locked && this.control.keyR.pressed) {
       const entity = this.selected || this.getEntityAtReticle()
       if (entity?.isApp) {
         let blueprintId = entity.data.blueprint
@@ -265,9 +296,14 @@ export class ClientBuilder extends System {
     if (this.control.keyZ.pressed && (this.control.metaLeft.down || this.control.controlLeft.down)) {
       this.undo()
     }
-    // TODO: move up/down
-    // this.selected.position.y -= this.control.pointer.delta.y * delta * 0.5
-    if (this.selected) {
+    // translate/rotate updates
+    if (this.selected && (this.mode === 'translate' || this.mode === 'rotate')) {
+      const app = this.selected
+      app.root.position.copy(this.gizmoTarget.position)
+      app.root.quaternion.copy(this.gizmoTarget.quaternion)
+    }
+    // grab updates
+    if (this.selected && this.mode === 'grab') {
       const app = this.selected
       const hit = this.getHitAtReticle(app, true)
       // place at distance
@@ -314,10 +350,12 @@ export class ClientBuilder extends System {
           }
         }
       }
-
-      // periodically send updates
+    }
+    // send selected updates
+    if (this.selected) {
       this.lastMoveSendTime += delta
       if (this.lastMoveSendTime > this.world.networkRate) {
+        const app = this.selected
         this.world.network.send('entityModified', {
           id: app.data.id,
           position: app.root.position.toArray(),
@@ -376,11 +414,65 @@ export class ClientBuilder extends System {
     this.world.emit('build-mode', enabled)
   }
 
+  setMode(mode) {
+    // cleanup
+    if (this.selected) {
+      if (this.mode === 'grab') {
+        this.control.keyC.capture = false
+        this.control.scrollDelta.capture = false
+      }
+      if (this.mode === 'translate' || this.mode === 'rotate') {
+        this.world.stage.scene.remove(this.gizmoTarget)
+        this.world.stage.scene.remove(this.gizmoHelper)
+      }
+    }
+    // change
+    this.mode = mode
+    if (this.mode === 'grab') {
+      if (this.selected) {
+        const app = this.selected
+        this.control.keyC.capture = true
+        this.control.scrollDelta.capture = true
+        this.target.position.copy(app.root.position)
+        this.target.quaternion.copy(app.root.quaternion)
+        this.target.limit = PROJECT_MAX
+      }
+    }
+    if (this.mode === 'translate' || this.mode === 'rotate') {
+      if (!this.gizmo) {
+        this.gizmo = new TransformControls(this.world.camera, this.viewport)
+        this.gizmo.setSize(0.7)
+        this.gizmo.space = 'world'
+        this.gizmo._gizmo.helper.translate.scale.setScalar(0)
+        this.gizmo._gizmo.helper.rotate.scale.setScalar(0)
+        this.gizmo._gizmo.helper.scale.scale.setScalar(0)
+        this.gizmo.addEventListener('mouseDown', () => {
+          this.gizmoActive = true
+        })
+        this.gizmo.addEventListener('mouseUp', () => {
+          this.gizmoActive = false
+        })
+        this.gizmoTarget = new THREE.Object3D()
+        this.gizmoHelper = this.gizmo.getHelper()
+      }
+      if (this.selected) {
+        const app = this.selected
+        this.gizmoTarget.position.copy(app.root.position)
+        this.gizmoTarget.quaternion.copy(app.root.quaternion)
+        this.world.stage.scene.add(this.gizmoTarget)
+        this.world.stage.scene.add(this.gizmoHelper)
+        this.gizmo.attach(this.gizmoTarget)
+        this.gizmo.mode = mode
+      }
+    }
+    this.updateActions()
+  }
+
   select(app) {
-    // do nothing if not changed
+    // do nothing if unchanged
     if (this.selected === app) return
     // deselect existing
-    if (this.selected) {
+    if (this.selected && this.selected !== app) {
       if (!this.selected.dead && this.selected.data.mover === this.world.network.id) {
         const app = this.selected
         app.data.mover = null
@@ -397,8 +489,14 @@ export class ClientBuilder extends System {
         app.build()
       }
       this.selected = null
-      this.control.keyC.capture = false
-      this.control.scrollDelta.capture = false
+      if (this.mode === 'grab') {
+        this.control.keyC.capture = false
+        this.control.scrollDelta.capture = false
+      }
+      if (this.mode === 'translate' || this.mode === 'rotate') {
+        this.world.stage.scene.remove(this.gizmoTarget)
+        this.world.stage.scene.remove(this.gizmoHelper)
+      }
     }
     // select new (if any)
     if (app) {
@@ -408,11 +506,37 @@ export class ClientBuilder extends System {
         this.world.network.send('entityModified', { id: app.data.id, mover: app.data.mover })
       }
       this.selected = app
-      this.control.keyC.capture = true
-      this.control.scrollDelta.capture = true
-      this.target.position.copy(app.root.position)
-      this.target.quaternion.copy(app.root.quaternion)
-      this.target.limit = PROJECT_MAX
+      if (this.mode === 'grab') {
+        this.control.keyC.capture = true
+        this.control.scrollDelta.capture = true
+        this.target.position.copy(app.root.position)
+        this.target.quaternion.copy(app.root.quaternion)
+        this.target.limit = PROJECT_MAX
+      }
+      if (this.mode === 'translate' || this.mode === 'rotate') {
+        if (!this.gizmo) {
+          this.gizmo = new TransformControls(this.world.camera, this.viewport)
+          this.gizmo.setSize(0.7)
+          this.gizmo.space = 'local'
+          this.gizmo._gizmo.helper.translate.scale.setScalar(0)
+          this.gizmo._gizmo.helper.rotate.scale.setScalar(0)
+          this.gizmo._gizmo.helper.scale.scale.setScalar(0)
+          this.gizmo.addEventListener('mouseDown', () => {
+            this.gizmoActive = true
+          })
+          this.gizmo.addEventListener('mouseUp', () => {
+            this.gizmoActive = false
+          })
+          this.gizmoTarget = new THREE.Object3D()
+          this.gizmoHelper = this.gizmo.getHelper()
+        }
+        this.gizmoTarget.position.copy(app.root.position)
+        this.gizmoTarget.quaternion.copy(app.root.quaternion)
+        this.world.stage.scene.add(this.gizmoTarget)
+        this.world.stage.scene.add(this.gizmoHelper)
+        this.gizmo.attach(this.gizmoTarget)
+        this.gizmo.mode = this.mode
+      }
     }
     // update actions
     this.updateActions()

@@ -31,6 +31,10 @@ export class ClientStats extends System {
 
   start() {
     this.world.prefs.on('change', this.onPrefsChange)
+    this.world.on('ready', this.onReady)
+  }
+
+  onReady = () => {
     if (this.world.prefs.stats) {
       this.toggle(true)
     }

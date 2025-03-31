@@ -420,6 +420,10 @@ export class Node {
             return child.getProxy()
           })
         },
+        get(id) {
+          const node = self.get(id)
+          return node?.getProxy() || null
+        },
         getWorldMatrix(mat) {
           return self.getWorldMatrix(mat)
         },
