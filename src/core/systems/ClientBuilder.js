@@ -148,7 +148,7 @@ export class ClientBuilder extends System {
       }
     }
     // inspect out of pointer-lock
-    if (!this.selected && !this.control.pointer.locked && this.control.mouseRight.pressed) {
+    else if (!this.selected && !this.control.pointer.locked && this.control.mouseRight.pressed) {
       const entity = this.getEntityAtPointer()
       if (entity?.isApp) {
         this.select(null)
