@@ -42,6 +42,7 @@ export class ClientBuilder extends System {
     this.enabled = false
     this.selected = null
     this.mode = 'grab'
+    this.localSpace = false
     this.target = new THREE.Object3D()
     this.target.rotation.reorder('YXZ')
     this.lastMoveSendTime = 0
@@ -100,21 +101,25 @@ export class ClientBuilder extends System {
       actions.push({ type: 'space', label: 'Jump / Fly (Double-Tap)' })
       actions.push({ type: 'tab', label: 'Exit Build Mode' })
     }
-    if (this.enabled && this.selected) {
-      actions.push({ type: 'mouseLeft', label: this.mode === 'grab' ? 'Place' : 'Select / Transform' })
-      if (this.mode === 'grab') {
-        actions.push({ type: 'mouseWheel', label: 'Rotate' })
-      }
+    if (this.enabled && this.selected && this.mode === 'grab') {
+      actions.push({ type: 'mouseLeft', label: 'Place' })
+      actions.push({ type: 'mouseWheel', label: 'Rotate' })
       actions.push({ type: 'mouseRight', label: 'Inspect' })
       actions.push({ type: 'custom', btn: '123', label: 'Grab / Translate / Rotate' })
-      if (this.mode === 'grab') {
-        actions.push({ type: 'keyF', label: 'Push' })
-        actions.push({ type: 'keyC', label: 'Pull' })
-      }
+      actions.push({ type: 'keyF', label: 'Push' })
+      actions.push({ type: 'keyC', label: 'Pull' })
       actions.push({ type: 'keyX', label: 'Destroy' })
-      if (this.mode === 'grab') {
-        actions.push({ type: 'controlLeft', label: 'No Snap (Hold)' })
-      }
+      actions.push({ type: 'controlLeft', label: 'No Snap (Hold)' })
+      actions.push({ type: 'space', label: 'Jump / Fly (Double-Tap)' })
+      actions.push({ type: 'tab', label: 'Exit Build Mode' })
+    }
+    if (this.enabled && this.selected && (this.mode === 'translate' || this.mode === 'rotate')) {
+      actions.push({ type: 'mouseLeft', label: 'Select / Transform' })
+      actions.push({ type: 'mouseRight', label: 'Inspect' })
+      actions.push({ type: 'custom', btn: '123', label: 'Grab / Translate / Rotate' })
+      actions.push({ type: 'keyT', label: this.localSpace ? 'World Space' : 'Local Space' })
+      actions.push({ type: 'keyX', label: 'Destroy' })
+      actions.push({ type: 'controlLeft', label: 'No Snap (Hold)' })
       actions.push({ type: 'space', label: 'Jump / Fly (Double-Tap)' })
       actions.push({ type: 'tab', label: 'Exit Build Mode' })
     }
@@ -199,6 +204,12 @@ export class ClientBuilder extends System {
         this.world.emit('toast', entity.data.pinned ? 'Pinned' : 'Un-pinned')
         this.select(null)
       }
+    }
+    // gizmo local/world toggle
+    if (this.control.keyT.pressed & (this.mode === 'translate' || this.mode === 'rotate')) {
+      this.localSpace = !this.localSpace
+      this.gizmo.space = this.localSpace ? 'local' : 'world'
+      this.updateActions()
     }
     // grab mode
     if (this.control.digit1.pressed) {
@@ -301,6 +312,13 @@ export class ClientBuilder extends System {
       const app = this.selected
       app.root.position.copy(this.gizmoTarget.position)
       app.root.quaternion.copy(this.gizmoTarget.quaternion)
+      // snap rotation to degrees
+      if (!this.control.controlLeft.down) {
+        const newY = this.gizmoTarget.rotation.y
+        const degrees = newY / DEG2RAD
+        const snappedDegrees = Math.round(degrees / SNAP_DEGREES) * SNAP_DEGREES
+        app.root.rotation.y = snappedDegrees * DEG2RAD
+      }
     }
     // grab updates
     if (this.selected && this.mode === 'grab') {
