@@ -13,6 +13,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+## [v0.10.0]
+
+### Added
+- core: new streamlined user interface
+- core: grayscale overlay when disconnected
+- core: new world menu for admins to change world environment, default avatar, spawns etc
+- core: new gizmo for fine-grained builder controls
+- apps: controller support for tag, contacts and layers
+- apps: support for interleaved buffer geometry
+- apps: geometry handles
+- apps: Math globals
+- apps: player.local boolean
+- apps: ui margin and padding per side
+- apps: apps can now redirect to a url or open in a new tab 
+- apps: ability to load models from a url on the fly
+- apps: node.get(id) to find matches inside any node hierarchy
+- core: new mod/plugin hooks (experimental)
+- core: added ping time to /stats
+
+### Changed
+- apps: uiimage node stability and docs
+- apps: ui absolue positioning and flex additions
+
+### Fixed
+- apps: ui gap size not correct
+- core: vr button not working
+- core: octree issues with tiny objects, improves memory usage
+- core: fix audio unmount issues
+- core: equipping one vrm while one is already uploading (race condition)
+
 ## [v0.9.0]
 
 ### Added
@@ -289,7 +319,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic project structure
 - Core functionality from original project
 
-[Unreleased]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.8.1...v0.9.0
 [0.8.1]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/hyperfy-xyz/hyperfy/compare/v0.7.1...v0.8.0

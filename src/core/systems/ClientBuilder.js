@@ -304,7 +304,11 @@ export class ClientBuilder extends System {
       }
     }
     // undo
-    if (this.control.keyZ.pressed && (this.control.metaLeft.down || this.control.controlLeft.down)) {
+    if (
+      this.control.keyZ.pressed &&
+      !this.control.shiftLeft.down &&
+      (this.control.metaLeft.down || this.control.controlLeft.down)
+    ) {
       this.undo()
     }
     // translate updates
@@ -412,9 +416,11 @@ export class ClientBuilder extends System {
       const entity = this.world.entities.get(undo.entityId)
       if (!entity) return
       entity.data.position = undo.position
+      entity.data.quaternion = undo.quaternion
       this.world.network.send('entityModified', {
         id: undo.entityId,
         position: entity.data.position,
+        quaternion: entity.data.quaternion,
       })
       entity.build()
       return
@@ -445,8 +451,7 @@ export class ClientBuilder extends System {
         this.control.scrollDelta.capture = false
       }
       if (this.mode === 'translate' || this.mode === 'rotate') {
-        this.world.stage.scene.remove(this.gizmoTarget)
-        this.world.stage.scene.remove(this.gizmoHelper)
+        this.detachGizmo()
       }
     }
     // change
@@ -462,31 +467,8 @@ export class ClientBuilder extends System {
       }
     }
     if (this.mode === 'translate' || this.mode === 'rotate') {
-      if (!this.gizmo) {
-        this.gizmo = new TransformControls(this.world.camera, this.viewport)
-        this.gizmo.setSize(0.7)
-        this.gizmo.space = this.localSpace ? 'local' : 'world'
-        this.gizmo._gizmo.helper.translate.scale.setScalar(0)
-        this.gizmo._gizmo.helper.rotate.scale.setScalar(0)
-        this.gizmo._gizmo.helper.scale.scale.setScalar(0)
-        this.gizmo.addEventListener('mouseDown', () => {
-          this.gizmoActive = true
-        })
-        this.gizmo.addEventListener('mouseUp', () => {
-          this.gizmoActive = false
-        })
-        this.gizmoTarget = new THREE.Object3D()
-        this.gizmoHelper = this.gizmo.getHelper()
-      }
       if (this.selected) {
-        const app = this.selected
-        this.gizmoTarget.position.copy(app.root.position)
-        this.gizmoTarget.quaternion.copy(app.root.quaternion)
-        this.world.stage.scene.add(this.gizmoTarget)
-        this.world.stage.scene.add(this.gizmoHelper)
-        this.gizmo.rotationSnap = SNAP_DEGREES * DEG2RAD
-        this.gizmo.attach(this.gizmoTarget)
-        this.gizmo.mode = mode
+        this.attachGizmo(this.selected, this.mode)
       }
     }
     this.updateActions()
@@ -518,12 +500,17 @@ export class ClientBuilder extends System {
         this.control.scrollDelta.capture = false
       }
       if (this.mode === 'translate' || this.mode === 'rotate') {
-        this.world.stage.scene.remove(this.gizmoTarget)
-        this.world.stage.scene.remove(this.gizmoHelper)
+        this.detachGizmo()
       }
     }
     // select new (if any)
     if (app) {
+      this.addUndo({
+        name: 'move-entity',
+        entityId: app.data.id,
+        position: app.data.position.slice(),
+        quaternion: app.data.quaternion.slice(),
+      })
       if (app.data.mover !== this.world.network.id) {
         app.data.mover = this.world.network.id
         app.build()
@@ -538,33 +525,48 @@ export class ClientBuilder extends System {
         this.target.limit = PROJECT_MAX
       }
       if (this.mode === 'translate' || this.mode === 'rotate') {
-        if (!this.gizmo) {
-          this.gizmo = new TransformControls(this.world.camera, this.viewport)
-          this.gizmo.setSize(0.7)
-          this.gizmo.space = this.localSpace ? 'local' : 'world'
-          this.gizmo._gizmo.helper.translate.scale.setScalar(0)
-          this.gizmo._gizmo.helper.rotate.scale.setScalar(0)
-          this.gizmo._gizmo.helper.scale.scale.setScalar(0)
-          this.gizmo.addEventListener('mouseDown', () => {
-            this.gizmoActive = true
-          })
-          this.gizmo.addEventListener('mouseUp', () => {
-            this.gizmoActive = false
-          })
-          this.gizmoTarget = new THREE.Object3D()
-          this.gizmoHelper = this.gizmo.getHelper()
-        }
-        this.gizmoTarget.position.copy(app.root.position)
-        this.gizmoTarget.quaternion.copy(app.root.quaternion)
-        this.world.stage.scene.add(this.gizmoTarget)
-        this.world.stage.scene.add(this.gizmoHelper)
-        this.gizmo.rotationSnap = SNAP_DEGREES * DEG2RAD
-        this.gizmo.attach(this.gizmoTarget)
-        this.gizmo.mode = this.mode
+        this.attachGizmo(app, this.mode)
       }
     }
     // update actions
     this.updateActions()
+  }
+
+  attachGizmo(app, mode) {
+    if (this.gizmo) this.detachGizmo()
+    // create gizmo
+    this.gizmo = new TransformControls(this.world.camera, this.viewport)
+    this.gizmo.setSize(0.7)
+    this.gizmo.space = this.localSpace ? 'local' : 'world'
+    this.gizmo._gizmo.helper.translate.scale.setScalar(0)
+    this.gizmo._gizmo.helper.rotate.scale.setScalar(0)
+    this.gizmo._gizmo.helper.scale.scale.setScalar(0)
+    this.gizmo.addEventListener('mouseDown', () => {
+      this.gizmoActive = true
+    })
+    this.gizmo.addEventListener('mouseUp', () => {
+      this.gizmoActive = false
+    })
+    this.gizmoTarget = new THREE.Object3D()
+    this.gizmoHelper = this.gizmo.getHelper()
+    // initialize it
+    this.gizmoTarget.position.copy(app.root.position)
+    this.gizmoTarget.quaternion.copy(app.root.quaternion)
+    this.world.stage.scene.add(this.gizmoTarget)
+    this.world.stage.scene.add(this.gizmoHelper)
+    this.gizmo.rotationSnap = SNAP_DEGREES * DEG2RAD
+    this.gizmo.attach(this.gizmoTarget)
+    this.gizmo.mode = mode
+  }
+
+  detachGizmo() {
+    if (!this.gizmo) return
+    this.world.stage.scene.remove(this.gizmoTarget)
+    this.world.stage.scene.remove(this.gizmoHelper)
+    this.gizmo.detach()
+    this.gizmo.disconnect()
+    this.gizmo.dispose()
+    this.gizmo = null
   }
 
   getEntityAtReticle() {
