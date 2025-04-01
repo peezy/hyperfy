@@ -22,6 +22,8 @@ const MIN_ZOOM = 2
 const MAX_ZOOM = 100 // 16
 const STICK_MAX_DISTANCE = 50
 const DEFAULT_CAM_HEIGHT = 1.2
+const TARGET_LOCK_MAX_DISTANCE = 20 // Maximum distance to lock onto a target
+const TARGET_LOCK_ROTATION_SPEED = 5 // How fast to rotate towards target when locked
 
 const v1 = new THREE.Vector3()
 const v2 = new THREE.Vector3()
@@ -85,6 +87,38 @@ export class PlayerLocal extends Entity {
     this.flyDrag = 300
     this.flyDir = new THREE.Vector3()
 
+    // Target lock-on system initialization
+    this.lockedTarget = null
+    this.targetLockOn = false
+    this.targetEntities = []
+    this.currentTargetIndex = -1
+    this.lastTargetSwitchTime = 0
+    this.targetSwitchCooldown = 0.2 // seconds cooldown between target switches
+
+    // Create target marker
+    this.targetMarker = createNode('ui', {
+      width: 50,
+      height: 50,
+      size: 0.01,
+      pivot: 'center',
+      billboard: 'full',
+      justifyContent: 'center',
+      alignItems: 'center',
+      active: false,
+    })
+    
+    const targetCircle = createNode('uiview', {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: 3,
+      borderColor: '#ff0000',
+      backgroundColor: 'rgba(255, 0, 0, 0.2)',
+    })
+    
+    this.targetMarker.add(targetCircle)
+    this.targetMarker.activate({ world: this.world, entity: this })
+
     this.platform = {
       actor: null,
       prevTransform: new THREE.Matrix4(),
@@ -95,6 +129,8 @@ export class PlayerLocal extends Entity {
     this.base = createNode('group')
     this.base.position.fromArray(this.data.position)
     this.base.quaternion.fromArray(this.data.quaternion)
+
+    this.emotes = Emotes
 
     this.aura = createNode('group')
 
@@ -274,8 +310,13 @@ export class PlayerLocal extends Entity {
     this.control.camera.position.copy(this.cam.position)
     this.control.camera.quaternion.copy(this.cam.quaternion)
     this.control.camera.zoom = this.cam.zoom
-    // this.control.setActions([{ type: 'space', label: 'Jump / Double-Jump' }])
-    // this.control.setActions([{ type: 'escape', label: 'Menu' }])
+    
+    // Set action hints for the player
+    this.control.setActions([
+      { type: 'space', label: 'Jump / Double-Jump' },
+      { type: 'keyQ', label: 'Lock-On Target' },
+      { type: 'keyE', label: 'Switch Target' }
+    ])
   }
 
   toggleFlying() {
@@ -650,10 +691,22 @@ export class PlayerLocal extends Entity {
     const freeze = this.data.effect?.freeze
     const anchor = this.getAnchorMatrix()
 
+    // Target lock-on system key handling
+    if (this.control.keyQ?.pressed) {
+      this.toggleTargetLock()
+    }
+
+    if (this.control.keyE?.pressed && this.targetLockOn) {
+      this.switchTarget()
+    }
+
     // update cam look direction
     if (isXR) {
       // in xr clear camera rotation (handled internally)
       this.cam.rotation.set(0, 0, 0)
+    } else if (this.targetLockOn && this.lockedTarget) {
+      // Update camera to focus on locked target
+      this.updateCameraForTargetLock(delta)
     } else if (this.control.pointer.locked) {
       // or pointer lock, rotate camera with pointer movement
       this.cam.rotation.x += -this.control.pointer.delta.y * POINTER_LOOK_SPEED * delta
@@ -773,6 +826,10 @@ export class PlayerLocal extends Entity {
       const alpha = 1 - Math.pow(0.00000001, delta)
       this.base.quaternion.slerp(q1, alpha)
     }
+    // If target is locked, face the target
+    else if (this.targetLockOn && this.lockedTarget) {
+      this.faceLockedTarget(delta)
+    }
     // if we're moving continually rotate ourselves toward the direction we are moving
     else if (this.moving) {
       const alpha = 1 - Math.pow(0.00000001, delta)
@@ -798,17 +855,54 @@ export class PlayerLocal extends Entity {
     if (this.data.effect?.emote) {
       emote = this.data.effect.emote
     } else if (this.flying) {
-      emote = Emotes.FLOAT
+      emote = this.emotes.FLOAT
     } else if (this.airJumping) {
-      emote = Emotes.FLIP
+      emote = this.emotes.FLIP
     } else if (this.jumping) {
-      emote = Emotes.FLOAT
+      emote = this.emotes.FLOAT
     } else if (this.falling) {
-      emote = this.fallDistance > 1.6 ? Emotes.FALL : Emotes.FLOAT
+      emote = this.fallDistance > 1.6 ? this.emotes.FALL : this.emotes.FLOAT
     } else if (this.moving) {
-      emote = this.running ? Emotes.RUN : Emotes.WALK
+      if (this.targetLockOn && this.lockedTarget) {
+        // Get the direction to target in world space
+        const toTarget = v1.copy(this.lockedTarget.targetPosition).sub(this.base.position)
+        toTarget.y = 0
+        toTarget.normalize()
+        
+        // Get the movement direction in world space
+        const worldMoveDir = v2.copy(this.moveDir)
+        
+        // Project movement onto target direction to determine if moving forward/backward
+        const forwardDot = worldMoveDir.dot(toTarget)
+        
+        // Get right vector relative to target direction
+        const rightVector = v3.crossVectors(toTarget, UP).normalize()
+        
+        // Project movement onto right vector to determine if strafing
+        const rightDot = worldMoveDir.dot(rightVector)
+        
+        // Determine movement type based on projections
+        if (Math.abs(rightDot) > Math.abs(forwardDot)) {
+          // Strafing dominates the movement
+          if (rightDot > 0) {
+            // Strafing right
+            emote = this.running ? this.emotes.RUN_STRAFE_RIGHT : this.emotes.STRAFE_RIGHT
+          } else {
+            // Strafing left
+            emote = this.running ? this.emotes.RUN_STRAFE_LEFT : this.emotes.STRAFE_LEFT
+          }
+        } else if (forwardDot < -0.5) {
+          // Moving backward
+          emote = this.running ? this.emotes.RUN_BACKWARD : this.emotes.WALK_BACKWARD
+        } else {
+          // Moving forward or slight angles
+          emote = this.running ? this.emotes.RUN : this.emotes.WALK
+        }
+      } else {
+        emote = this.running ? this.emotes.RUN : this.emotes.WALK
+      }
     }
-    if (!emote) emote = Emotes.IDLE
+    if (!emote) emote = this.emotes.IDLE
     let emoteChanged
     if (this.emote !== emote) {
       this.emote = emote
@@ -862,6 +956,26 @@ export class PlayerLocal extends Entity {
   }
 
   lateUpdate(delta) {
+    // Validate locked target in lateUpdate
+    if (this.targetLockOn && !this.validateLockedTarget()) {
+      // Current target is invalid, try to find a new one
+      this.findPotentialTargets()
+      if (this.targetEntities.length > 0) {
+        this.currentTargetIndex = 0
+        this.lockedTarget = this.targetEntities[this.currentTargetIndex]
+        this.updateTargetMarkerPosition()
+      } else {
+        this.targetLockOn = false
+        this.lockedTarget = null
+        this.targetMarker.active = false
+      }
+    }
+    
+    // Update target marker position if we have a target locked
+    if (this.targetLockOn && this.lockedTarget) {
+      this.updateTargetMarkerPosition()
+    }
+
     const anchor = this.getAnchorMatrix()
     // if we're anchored, force into that pose
     if (anchor) {
@@ -1000,6 +1114,266 @@ export class PlayerLocal extends Entity {
     }
     if (changed) {
       this.world.emit('player', this)
+    }
+  }
+
+  // Toggle target lock-on system
+  toggleTargetLock() {
+    if (this.targetLockOn) {
+      // Turn off lock-on
+      this.targetLockOn = false
+      this.lockedTarget = null
+      this.currentTargetIndex = -1
+      this.targetMarker.active = false
+    } else {
+      // Turn on lock-on and find targets based on raycast
+      const hit = this.getRaycastTarget()
+      if (hit) {
+        this.targetLockOn = true
+        this.lockedTarget = hit
+        this.targetMarker.active = true
+        this.updateTargetMarkerPosition()
+      }
+    }
+  }
+
+  // Find target by raycasting
+  getRaycastTarget() {
+    const hits = this.world.stage.raycastReticle()
+    
+    for (const hit of hits) {
+      // Skip non-entity hits
+      const entity = hit.getEntity?.()
+      if (!entity) continue
+      
+      // If it's a player entity
+      if (entity.isPlayer && entity !== this) {
+        hit.avatarEntity = entity
+        hit.targetPosition = entity.base.position.clone()
+        hit.headHeight = entity.avatar?.getHeadToHeight() || 1.6
+        return hit
+      }
+      
+      // If it's an app entity with an avatar
+      if (entity.isApp) {
+        // For VRM models or apps with avatar components
+        const hasAvatar = entity.root?.get && entity.root.get('avatar')
+        const isVrmModel = entity.blueprint?.model?.endsWith('.vrm')
+        
+        if (hasAvatar || isVrmModel) {
+          hit.avatarEntity = entity
+          hit.targetPosition = entity.root.position.clone()
+          hit.headHeight = hasAvatar && hasAvatar.getHeadToHeight ? 
+                           hasAvatar.getHeadToHeight() || 1.6 : 1.6
+          return hit
+        }
+      }
+    }
+    
+    return null
+  }
+
+  // Switch to the next target in the list
+  switchTarget() {
+    // For raycast-based targeting, we'll do a new raycast with a wider search
+    if (!this.targetLockOn) return
+    
+    // Check cooldown
+    if (this.world.time - this.lastTargetSwitchTime < this.targetSwitchCooldown) {
+      return
+    }
+    
+    // Update the switch time
+    this.lastTargetSwitchTime = this.world.time
+    
+    // Store current target
+    const currentTarget = this.lockedTarget
+    
+    // Find all potential targets using traditional method
+    this.findPotentialTargets()
+    
+    if (this.targetEntities.length === 0) {
+      this.targetLockOn = false
+      this.targetMarker.active = false
+      return
+    }
+    
+    // Find the index of the current target
+    let currentIndex = -1
+    if (currentTarget && currentTarget.avatarEntity) {
+      currentIndex = this.targetEntities.findIndex(entity => 
+        entity === currentTarget.avatarEntity
+      )
+    }
+    
+    // Move to the next target
+    const nextIndex = (currentIndex + 1) % this.targetEntities.length
+    const nextEntity = this.targetEntities[nextIndex]
+    
+    // Create a simulated hit object
+    this.lockedTarget = {
+      avatarEntity: nextEntity,
+      targetPosition: nextEntity.base?.position || nextEntity.root?.position,
+      headHeight: nextEntity.avatar?.getHeadToHeight?.() || 1.6
+    }
+    
+    this.updateTargetMarkerPosition()
+  }
+
+  // Update the target marker's position
+  updateTargetMarkerPosition() {
+    if (!this.lockedTarget) return;
+    
+    // Use the hit information to position the marker
+    const targetPos = this.lockedTarget?.targetPosition?.clone();
+    if(!targetPos) {
+      this.lockedTarget = null
+      return
+    };
+    // Add offset to place above the target's head
+    targetPos.y += this.lockedTarget.headHeight + 0.3; // Slightly above head
+    
+    this.targetMarker.position.copy(targetPos);
+  }
+
+  // Update camera to focus on the locked target
+  updateCameraForTargetLock(delta) {
+    if (!this.lockedTarget) {
+      this.targetLockOn = false;
+      return;
+    }
+    
+    // Get target position
+    const targetPosition = v1.copy(this.lockedTarget.targetPosition);
+    
+    // Add height offset to look at the avatar's head/upper body rather than feet
+    targetPosition.y += this.lockedTarget.headHeight * 0.7;
+    
+    // Use quaternion for camera rotation to avoid 360 spinning
+    // Calculate the look-at quaternion
+    const lookAtMatrix = m1.lookAt(this.cam.position, targetPosition, UP);
+    const targetQuaternion = q2.setFromRotationMatrix(lookAtMatrix);
+    
+    // Create an intermediate quaternion for smoother rotation
+    const smoothingFactor = 1 - Math.pow(0.001, delta);
+    
+    // Copy current camera rotation to a quaternion
+    const currentQuaternion = q3.setFromEuler(this.cam.rotation);
+    
+    // Smoothly interpolate using quaternion slerp (shortest path)
+    currentQuaternion.slerp(targetQuaternion, smoothingFactor);
+    
+    // Apply the interpolated quaternion back to camera rotation
+    this.cam.rotation.setFromQuaternion(currentQuaternion, 'YXZ');
+    
+    // Ensure zero roll
+    this.cam.rotation.z = 0;
+  }
+
+  // Make the player face the locked target
+  faceLockedTarget(delta) {
+    if (!this.lockedTarget) return;
+    
+    // Get target position
+    const targetPosition = this.lockedTarget.targetPosition;
+    
+    // Get direction to target (horizontal only - for character rotation)
+    const toTarget = v1.copy(targetPosition).sub(this.base.position);
+    toTarget.y = 0; // Keep only horizontal direction
+    toTarget.normalize();
+    
+    if (toTarget.length() === 0) return;
+    
+    // Create quaternion that points FORWARD in the direction of the target
+    q1.setFromUnitVectors(FORWARD, toTarget);
+    
+    // Smoothly rotate towards target
+    const alpha = 1 - Math.pow(0.001, delta * TARGET_LOCK_ROTATION_SPEED);
+    this.base.quaternion.slerp(q1, alpha);
+  }
+
+  // Check if the locked target is still valid
+  validateLockedTarget() {
+    if (!this.lockedTarget) return false;
+    
+    // For raycast-based targets, check if the entity still exists
+    const entity = this.lockedTarget.avatarEntity;
+    if (!entity || entity.destroyed) return false;
+    
+    // Get current position
+    const currentPos = entity.base?.position || entity.root?.position;
+    if (!currentPos) return false;
+    
+    // Update the stored position
+    this.lockedTarget.targetPosition = currentPos.clone();
+    
+    // Check if still within range
+    const distance = this.base.position.distanceTo(currentPos);
+    if (distance > TARGET_LOCK_MAX_DISTANCE) return false;
+    
+    return true;
+  }
+
+  // KEEP the original findPotentialTargets method for use with switchTarget
+  findPotentialTargets() {
+    this.targetEntities = []
+    const playerPosition = this.base.position
+    
+    // Loop through all entities to find avatars
+    for (const [_, entity] of this.world.entities.items) {
+      // Skip ourselves
+      if (entity === this) continue
+      
+      // Check for valid avatar entities
+      let isValidAvatar = false;
+      let entityPosition;
+      
+      // Case 1: Player entities with direct avatar property
+      if (entity.avatar && entity.base) {
+        isValidAvatar = true;
+        entityPosition = entity.base.position;
+      }
+      // Case 2: App entities with VRM models
+      else if (entity.root && entity.root.position) {
+        // Check if it's an app entity with an avatar
+        const hasAvatar = entity.root.get && entity.root.get('avatar');
+        // Or check if the blueprint model is a VRM file
+        const isVrmModel = entity.blueprint?.model?.endsWith('.vrm');
+        
+        if (hasAvatar || isVrmModel) {
+          isValidAvatar = true;
+          entityPosition = entity.root.position;
+        }
+      }
+      
+      // If valid avatar, check distance and add to targets
+      if (isValidAvatar && entityPosition) {
+        const distance = playerPosition.distanceTo(entityPosition);
+        
+        // Only add if within the maximum lock-on distance
+        if (distance <= TARGET_LOCK_MAX_DISTANCE) {
+          this.targetEntities.push(entity);
+        }
+      }
+    }
+    
+    // Sort by distance to player
+    this.targetEntities.sort((a, b) => {
+      const posA = a.base?.position || a.root?.position;
+      const posB = b.base?.position || b.root?.position;
+      if (!posA || !posB) return 0;
+      
+      const distA = playerPosition.distanceTo(posA);
+      const distB = playerPosition.distanceTo(posB);
+      return distA - distB;
+    });
+  }
+
+  replaceAnimations(newEmotes, reset = false) {
+    if (reset) {
+      this.emotes = { ...Emotes, ...newEmotes }
+    } else {
+      this.emotes = { ...this.emotes, ...newEmotes }
     }
   }
 }
