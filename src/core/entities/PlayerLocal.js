@@ -791,10 +791,10 @@ export class PlayerLocal extends Entity {
     } else {
       // and vertically at our vrm model height
       this.cam.position.y += this.camHeight
-      // and slightly to the right over the avatars shoulder, when not in XR
+      // and slightly to the left over the avatars shoulder, when not in XR
       const forward = v1.copy(FORWARD).applyQuaternion(this.cam.quaternion)
       const right = v2.crossVectors(forward, UP).normalize()
-      this.cam.position.add(right.multiplyScalar(0.3))
+      this.cam.position.add(right.multiplyScalar(-0.3))
     }
 
     // emote
