@@ -7,6 +7,7 @@ import {
   MenuItemRange,
   MenuItemSwitch,
   MenuItemText,
+  MenuItemTextarea,
   MenuItemToggle,
 } from './Menu'
 import { usePermissions } from './usePermissions'
@@ -233,11 +234,15 @@ function MenuMainAudio({ world, pop, push }) {
 function MenuMainWorld({ world, pop, push }) {
   const player = world.entities.player
   const { isAdmin } = usePermissions(world)
+  const [title, setTitle] = useState(world.settings.title)
+  const [desc, setDesc] = useState(world.settings.desc)
   const [model, setModel] = useState(world.settings.model)
   const [avatar, setAvatar] = useState(world.settings.avatar)
   const [publicc, setPublic] = useState(world.settings.public)
   useEffect(() => {
     const onChange = changes => {
+      if (changes.title) setTitle(changes.title.value)
+      if (changes.desc) setDesc(changes.desc.value)
       if (changes.model) setModel(changes.model.value)
       if (changes.avatar) setAvatar(changes.avatar.value)
       if (changes.public) setPublic(changes.public.value)
@@ -250,6 +255,19 @@ function MenuMainWorld({ world, pop, push }) {
   return (
     <Menu title='Menu'>
       <MenuItemBack hint='Go back to the main menu' onClick={pop} />
+      <MenuItemText
+        label='Title'
+        hint='Change the title of this world. Shown in the browser tab and when sharing links'
+        placeholder='World'
+        value={title}
+        onChange={value => world.settings.set('title', value, true)}
+      />
+      <MenuItemText
+        label='Description'
+        hint='Change the description of this world. Shown in previews when sharing links to this world'
+        value={desc}
+        onChange={value => world.settings.set('desc', value, true)}
+      />
       <MenuItemFile
         label='Environment'
         hint='Change the global environment model'

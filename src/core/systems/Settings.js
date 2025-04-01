@@ -4,6 +4,8 @@ export class Settings extends System {
   constructor(world) {
     super(world)
 
+    this.title = null
+    this.desc = null
     this.model = null
     this.avatar = null
     this.public = null
@@ -12,10 +14,14 @@ export class Settings extends System {
   }
 
   deserialize(data) {
+    this.title = data.title
+    this.desc = data.desc
     this.model = data.model
     this.avatar = data.avatar
     this.public = data.public
     this.emit('change', {
+      title: { value: this.title },
+      desc: { value: this.desc },
       model: { value: this.model },
       avatar: { value: this.avatar },
       public: { value: this.public },
@@ -24,6 +30,8 @@ export class Settings extends System {
 
   serialize() {
     return {
+      desc: this.desc,
+      title: this.title,
       model: this.model,
       avatar: this.avatar,
       public: this.public,

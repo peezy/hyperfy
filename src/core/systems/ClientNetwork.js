@@ -140,6 +140,10 @@ export class ClientNetwork extends System {
     storage.set('authToken', data.authToken)
   }
 
+  onSettingsModified = data => {
+    this.world.settings.set(data.key, data.value)
+  }
+
   onChatAdded = msg => {
     this.world.chat.add(msg, false)
   }

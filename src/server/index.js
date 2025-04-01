@@ -40,6 +40,15 @@ const fastify = Fastify({ logger: { level: 'error' } })
 
 fastify.register(cors)
 fastify.register(compress)
+fastify.get('/', async (req, reply) => {
+  const title = world.settings.title || 'World'
+  const desc = world.settings.desc || ''
+  const filePath = path.join(__dirname, 'public', 'index.html')
+  let html = fs.readFileSync(filePath, 'utf-8')
+  html = html.replaceAll('{title}', title)
+  html = html.replaceAll('{desc}', desc)
+  reply.type('text/html').send(html)
+})
 fastify.register(statics, {
   root: path.join(__dirname, 'public'),
   prefix: '/',
