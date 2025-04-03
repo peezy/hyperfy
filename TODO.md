@@ -24,14 +24,12 @@
     - [] coins gravitate to player?
 - [] enforce ppl not being able to shoot if dead on server
 - [] hold X to exit instead of press
+- [] limit polar viewing angles
 
 # BUGS
 - [] player capsule blocks some raycasts when aiming down
     - [] it also continues to overheat the weapon even though no shot happens
     - [] solution i believe is to place the origin of the server raycast in front of the players eyes but outside of the capsule. the capsule will block shooting behind the player
-- [] huge lag spikes after server has been running for a while and a player dies
-- [] can still create tokens if shooting dead body for a certain amt of time
-- 
 
 ## Game Rules
 - depositing x amount of hyper enables entry
