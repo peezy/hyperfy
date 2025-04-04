@@ -29,6 +29,8 @@ import {
   recordBalanceChange
 } from '../../server/db'
 
+import moment from 'moment'
+
 export class Solana extends System {
   constructor(world) {
     super(world)
@@ -1167,27 +1169,27 @@ export class Solana extends System {
                 const currentBalance = tokenBalance ? Number(tokenBalance.balance) : 0
                 const changeAmount = newBalance - currentBalance
                 
-                // Determine the reason and initiator from options
-                const reason = options.reason || `Balance adjusted to ${newBalance}`
-                const initiatedBy = options.initiatedBy || 'admin'
+                // Only proceed if there's an actual change to make
+                if (changeAmount === 0) {
+                  console.log(`No change needed for player ${playerId}, balance already at ${newBalance}`)
+                  return { 
+                    success: true, 
+                    balance: newBalance,
+                    message: `Balance already at ${newBalance}, no change made`
+                  }
+                }
 
-                // Update the database
-                const success = await setTokenBalance(walletAddress, tokenMint, newBalance)
+                // Prepare audit options with defaults
+                const auditOptions = {
+                  reason: options.reason || `Balance adjusted to ${newBalance}`,
+                  initiatedBy: options.initiatedBy || 'admin',
+                  changeType: 'adjustment'
+                }
+
+                // Update the token balance in database with the audit options
+                const success = await setTokenBalance(walletAddress, tokenMint, newBalance, auditOptions)
                 
-                // Record the balance change in audit log
                 if (success) {
-                  await recordBalanceChange({
-                    walletAddress,
-                    tokenMint,
-                    previousBalance: currentBalance,
-                    newBalance,
-                    changeAmount,
-                    changeType: 'adjustment',
-                    txSignature: null,
-                    initiatedBy,
-                    reason
-                  })
-                  
                   console.log(`Updated server balance for player ${playerId} to ${newBalance} ${metadata?.metadata?.symbol || tokenMint}`)
                   return { 
                     success: true, 
@@ -1440,37 +1442,20 @@ export class Solana extends System {
                   tokenMint, 
                   amount, // Deduct the full amount including fee
                   signature,
-                  true // Enable warnings for negative balance but allow the withdrawal to proceed
+                  true, // Enable warnings for negative balance but allow the withdrawal to proceed
+                  {
+                    changeType: 'withdrawal',
+                    initiatedBy: 'user',
+                    reason: `Token withdrawal to on-chain wallet (Fee: ${feeAmount > 0 ? feeAmount : 0})`,
+                    transactionDetails: {
+                      type: transactionType,
+                      blockTime: txTimestamp,
+                      feeAmount: feeAmount > 0 ? feeAmount : undefined,
+                      feeWallet: feeAmount > 0 ? this.feeWalletAddress : undefined,
+                      netAmount: amountAfterFee
+                    }
+                  }
                 )
-                
-                // Record the balance change in audit trail
-                // We do this separately from withdrawTokenBalance's internal audit to ensure we have
-                // the complete context and can add more details
-                await recordBalanceChange({
-                  walletAddress,
-                  tokenMint,
-                  previousBalance: Number(tokenBalance.balance),
-                  newBalance: Number(tokenBalance.balance) - amount,
-                  changeAmount: -amount,
-                  changeType: 'withdrawal',
-                  txSignature: signature,
-                  initiatedBy: 'user',
-                  reason: `Token withdrawal to on-chain wallet (Fee: ${feeAmount > 0 ? feeAmount : 0})`
-                })
-                
-                // Record the withdrawal in the processed transactions table
-                await recordProcessedTransaction({
-                  signature,
-                  tokenMint,
-                  type: transactionType,
-                  blockTime: txTimestamp,
-                  amount: amount, // Full withdrawal amount
-                  recipientWallet: walletAddress,
-                  feeAmount: feeAmount > 0 ? feeAmount : undefined,
-                  feeWallet: feeAmount > 0 ? this.feeWalletAddress : undefined,
-                  netAmount: amountAfterFee, // Amount after fee
-                  success: true
-                })
                 
                 // Update tokenSyncState to track the last processed transaction
                 await updateTokenSyncState(tokenMint, signature, txTimestamp, 1)

@@ -90,7 +90,7 @@ export async function getWalletsWithTokenBalances(tokenMint) {
 }
 
 // Function to directly set a token balance (for script use)
-export async function setTokenBalance(walletAddress, tokenMint, amount) {
+export async function setTokenBalance(walletAddress, tokenMint, amount, options = {}) {
   const now = moment().toISOString()
 
   try {
@@ -99,6 +99,11 @@ export async function setTokenBalance(walletAddress, tokenMint, amount) {
 
     const previousBalance = entry ? Number(entry.balance) : 0
     const changeAmount = amount - previousBalance
+
+    // Skip if no change is needed
+    if (changeAmount === 0) {
+      return true;
+    }
 
     if (entry) {
       // Update existing entry
@@ -124,10 +129,10 @@ export async function setTokenBalance(walletAddress, tokenMint, amount) {
       previousBalance,
       newBalance: amount,
       changeAmount,
-      changeType: 'adjustment',
-      txSignature: null,
-      initiatedBy: 'admin',
-      reason: 'Manual balance adjustment',
+      changeType: options.changeType || 'adjustment',
+      txSignature: options.txSignature || null,
+      initiatedBy: options.initiatedBy || 'admin',
+      reason: options.reason || 'Manual balance adjustment',
     })
 
     return true
@@ -143,7 +148,8 @@ export async function withdrawTokenBalance(
   tokenMint,
   amount,
   txSignature,
-  warningIfInsufficientBalance = false
+  warningIfInsufficientBalance = false,
+  options = {}
 ) {
   const now = moment().toISOString()
 
@@ -181,19 +187,37 @@ export async function withdrawTokenBalance(
         lastTxSignature: txSignature,
       })
 
-      // Record the change in audit log
+      // Record the change in audit log with custom details if provided
       await trx('tokenBalanceAuditLog').insert({
         walletAddress,
         tokenMint,
         previousBalance: currentBalance,
         newBalance,
         changeAmount: -amount,
-        changeType: 'withdrawal',
+        changeType: options.changeType || 'withdrawal',
         txSignature,
-        initiatedBy: 'system',
-        reason: 'Token withdrawal',
+        initiatedBy: options.initiatedBy || 'system',
+        reason: options.reason || 'Token withdrawal',
         timestamp: now,
       })
+      
+      // If transaction details are provided, record the processed transaction
+      if (options.transactionDetails) {
+        const details = options.transactionDetails;
+        await trx('processedTransactions').insert({
+          signature: txSignature,
+          tokenMint,
+          type: details.type || 'withdrawal',
+          processedAt: now,
+          blockTime: details.blockTime,
+          amount,
+          recipientWallet: walletAddress,
+          feeAmount: details.feeAmount,
+          feeWallet: details.feeWallet,
+          netAmount: details.netAmount,
+          success: true,
+        });
+      }
     })
 
     return true
