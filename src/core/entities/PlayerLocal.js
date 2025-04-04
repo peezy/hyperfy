@@ -672,7 +672,7 @@ export class PlayerLocal extends Entity {
 
     // ensure we can't look too far up/down
     if (!isXR) {
-      this.cam.rotation.x = clamp(this.cam.rotation.x, -89 * DEG2RAD, 89 * DEG2RAD)
+      this.cam.rotation.x = clamp(this.cam.rotation.x, -50 * DEG2RAD, 50 * DEG2RAD)
     }
 
     // zoom camera if scrolling wheel
