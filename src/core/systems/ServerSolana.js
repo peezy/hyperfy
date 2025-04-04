@@ -254,6 +254,26 @@ export class Solana extends System {
           console.log(`Setting up watcher for token: ${tokenMint} and wallet: ${this.publicKey.toString()}`)
           const mintPubkey = new PublicKey(tokenMint)
           
+          // Check if we need to create an associated token account for the server wallet
+          // Only do this in active mode since we need the private key to sign transactions
+          if (this.mode === 'active') {
+            try {
+              console.log(`Checking for associated token account for mint: ${tokenMint}`)
+              const associatedTokenAccount = await getOrCreateAssociatedTokenAccount(
+                this.connection,
+                this.wallet,
+                mintPubkey,
+                this.publicKey
+              )
+              
+              console.log(`Associated token account: ${associatedTokenAccount.address.toString()}`)
+              console.log(`Account owner: ${associatedTokenAccount.owner.toString()}`)
+              console.log(`Account balance: ${associatedTokenAccount.amount.toString()}`)
+            } catch (err) {
+              console.error(`Error creating associated token account for mint ${tokenMint}:`, err)
+            }
+          }
+          
           // Find all token accounts owned by the server wallet for this token
           const tokenAccounts = await this.connection.getParsedTokenAccountsByOwner(
             this.publicKey,
@@ -266,6 +286,9 @@ export class Solana extends System {
           const accountBalances = new Map()
           const accountListeners = new Map()
           const subscribers = new Set()
+          
+          // Track transactions that are currently being processed to prevent duplicate processing
+          const inProcessTransactions = new Set()
           
           // Helper function to extract token balance
           const extractTokenBalance = data => {
@@ -298,6 +321,14 @@ export class Solana extends System {
               if (signatures.length > 0) {
                 // Check if we've already processed this transaction
                 const signature = signatures[0].signature
+                
+                // If this transaction is currently being processed, skip it
+                if (inProcessTransactions.has(signature)) {
+                  console.log(`Transaction ${signature} is already being processed, skipping...`)
+                  return
+                }
+                
+                // Check if transaction was already processed in the past
                 const alreadyProcessed = await isTransactionProcessed(signature)
                 
                 if (alreadyProcessed) {
@@ -305,203 +336,221 @@ export class Solana extends System {
                   return
                 }
                 
-                // Get the most recent transaction details
-                const recentTx = await this.connection.getParsedTransaction(
-                  signature,
-                  { maxSupportedTransactionVersion: 0 }
-                )
+                // Mark this transaction as being processed
+                inProcessTransactions.add(signature)
                 
-                if (recentTx) {
-                  const txInfo = {
-                    signature: signature,
-                    status: signatures[0].confirmationStatus,
-                    token: tokenMint,
-                    account: accountPubkey,
-                    oldBalance,
-                    newBalance,
-                    change: newBalance - oldBalance
-                  }
+                try {
+                  // Get the most recent transaction details
+                  const recentTx = await this.connection.getParsedTransaction(
+                    signature,
+                    { maxSupportedTransactionVersion: 0 }
+                  )
                   
-                  // Add token balance changes if available
-                  if (recentTx.meta && recentTx.meta.postTokenBalances && recentTx.meta.preTokenBalances) {
-                    txInfo.balanceChanges = recentTx.meta.postTokenBalances.map(postBalance => {
-                      const preBalance = recentTx.meta.preTokenBalances.find(
-                        pre => pre.accountIndex === postBalance.accountIndex
-                      )
-                      
-                      if (preBalance) {
-                        return {
-                          accountIndex: postBalance.accountIndex,
-                          accountPubkey: recentTx.transaction.message.accountKeys[postBalance.accountIndex].pubkey.toString(),
-                          mint: postBalance.mint,
-                          owner: postBalance.owner,
-                          preBalance: preBalance.uiTokenAmount.uiAmount,
-                          postBalance: postBalance.uiTokenAmount.uiAmount,
-                          change: postBalance.uiTokenAmount.uiAmount - preBalance.uiTokenAmount.uiAmount
-                        }
-                      }
-                      return null
-                    }).filter(Boolean)
+                  if (recentTx) {
+                    const txInfo = {
+                      signature: signature,
+                      status: signatures[0].confirmationStatus,
+                      token: tokenMint,
+                      account: accountPubkey,
+                      oldBalance,
+                      newBalance,
+                      change: newBalance - oldBalance
+                    }
                     
-                    // Calculate transaction timestamp
-                    const txTimestamp = recentTx.blockTime ? recentTx.blockTime * 1000 : Date.now()
-                    
-                    // Track incoming transactions to the server wallet
-                    // We're looking for token transfers where:
-                    // 1. Our account's balance increased (positive change)
-                    // 2. The token mint matches the token we're monitoring
-                    if (newBalance > oldBalance) {
-                      // Calculate actual token amount using decimals
-                      const tokenAmount = (newBalance - oldBalance) / (10 ** metadata?.mint?.decimals)
-                      
-                      // Try to find the sender by analyzing the transaction
-                      let senderWallet = null
-                      
-                      if (recentTx.meta.preTokenBalances && recentTx.meta.postTokenBalances) {
-                        // Look for an account whose balance decreased in this transaction
-                        for (const preBalance of recentTx.meta.preTokenBalances) {
-                          // Skip if not our token mint
-                          if (preBalance.mint !== tokenMint) continue
-                          
-                          const postBalance = recentTx.meta.postTokenBalances.find(
-                            post => post.accountIndex === preBalance.accountIndex
-                          )
-                          
-                          if (postBalance && 
-                              preBalance.uiTokenAmount.uiAmount > postBalance.uiTokenAmount.uiAmount && 
-                              preBalance.owner !== this.publicKey.toString()) {
-                            // This account's balance decreased and it's not our wallet - likely the sender
-                            senderWallet = preBalance.owner
-                            break
-                          }
-                        }
-                      }
-                      
-                      if (senderWallet) {
-                        console.log(`Detected incoming token transfer from ${senderWallet}`)
-                        console.log(`Amount: ${tokenAmount} ${metadata?.metadata?.symbol || tokenMint}`)
-                        
-                        // Update the sender's balance in our database
-                        await updateTokenBalance(
-                          senderWallet,
-                          tokenMint,
-                          tokenAmount,
-                          signature
+                    // Add token balance changes if available
+                    if (recentTx.meta && recentTx.meta.postTokenBalances && recentTx.meta.preTokenBalances) {
+                      txInfo.balanceChanges = recentTx.meta.postTokenBalances.map(postBalance => {
+                        const preBalance = recentTx.meta.preTokenBalances.find(
+                          pre => pre.accountIndex === postBalance.accountIndex
                         )
                         
-                        // Record the transaction in processedTransactions to prevent duplicate processing
-                        await recordProcessedTransaction({
-                          signature,
-                          tokenMint,
-                          type: 'deposit',
-                          blockTime: txTimestamp,
-                          amount: tokenAmount,
-                          senderWallet,
-                          success: true
-                        })
+                        if (preBalance) {
+                          return {
+                            accountIndex: postBalance.accountIndex,
+                            accountPubkey: recentTx.transaction.message.accountKeys[postBalance.accountIndex].pubkey.toString(),
+                            mint: postBalance.mint,
+                            owner: postBalance.owner,
+                            preBalance: preBalance.uiTokenAmount.uiAmount,
+                            postBalance: postBalance.uiTokenAmount.uiAmount,
+                            change: postBalance.uiTokenAmount.uiAmount - preBalance.uiTokenAmount.uiAmount
+                          }
+                        }
+                        return null
+                      }).filter(Boolean)
+                      
+                      // Calculate transaction timestamp
+                      const txTimestamp = recentTx.blockTime ? recentTx.blockTime * 1000 : Date.now()
+                      
+                      // Track incoming transactions to the server wallet
+                      // We're looking for token transfers where:
+                      // 1. Our account's balance increased (positive change)
+                      // 2. The token mint matches the token we're monitoring
+                      if (newBalance > oldBalance) {
+                        // Double-check if this transaction was processed in the meantime
+                        // This handles race conditions between multiple account change notifications
+                        const doubleCheckProcessed = await isTransactionProcessed(signature)
+                        if (doubleCheckProcessed) {
+                          console.log(`Transaction ${signature} was already processed by another handler, skipping...`)
+                          inProcessTransactions.delete(signature)
+                          return
+                        }
                         
-                        // Update tokenSyncState to track the last processed transaction
-                        await updateTokenSyncState(tokenMint, signature, txTimestamp, 1)
+                        // Calculate actual token amount using decimals
+                        const tokenAmount = (newBalance - oldBalance) / (10 ** metadata?.mint?.decimals)
                         
-                        console.log(`Updated token balance for wallet ${senderWallet}`)
-                        console.log(`Recorded transaction in processedTransactions table`)
-                        console.log(`Updated tokenSyncState with latest transaction`)
-                      } else {
-                        console.log(`Detected incoming token transfer, but couldn't identify sender`)
-                      }
-                    } else if (newBalance < oldBalance) {
-                      // This is a withdrawal - also record it to prevent double processing
-                      
-                      // Check if this is a fee transaction (requires looking for multiple transfers)
-                      const serverChanges = txInfo.balanceChanges.filter(
-                        change => change.owner === this.publicKey.toString()
-                      )
-                      
-                      // If there are multiple server wallet changes, this might be a fee transaction
-                      const isMultiTransfer = serverChanges.length > 1
-                      
-                      if (isMultiTransfer && this.feeWalletAddress) {
-                        // Look for fee transfer
+                        // Try to find the sender by analyzing the transaction
+                        let senderWallet = null
+                        
+                        if (recentTx.meta.preTokenBalances && recentTx.meta.postTokenBalances) {
+                          // Look for an account whose balance decreased in this transaction
+                          for (const preBalance of recentTx.meta.preTokenBalances) {
+                            // Skip if not our token mint
+                            if (preBalance.mint !== tokenMint) continue
+                            
+                            const postBalance = recentTx.meta.postTokenBalances.find(
+                              post => post.accountIndex === preBalance.accountIndex
+                            )
+                            
+                            if (postBalance && 
+                                preBalance.uiTokenAmount.uiAmount > postBalance.uiTokenAmount.uiAmount && 
+                                preBalance.owner !== this.publicKey.toString()) {
+                              // This account's balance decreased and it's not our wallet - likely the sender
+                              senderWallet = preBalance.owner
+                              break
+                            }
+                          }
+                        }
+                        
+                        if (senderWallet) {
+                          console.log(`Detected incoming token transfer from ${senderWallet}`)
+                          console.log(`Amount: ${tokenAmount} ${metadata?.metadata?.symbol || tokenMint}`)
+                          
+                          // First record the transaction to prevent duplicate processing
+                          // This must be done BEFORE updating the balance
+                          await recordProcessedTransaction({
+                            signature,
+                            tokenMint,
+                            type: 'deposit',
+                            blockTime: txTimestamp,
+                            amount: tokenAmount,
+                            senderWallet,
+                            success: true
+                          })
+                          
+                          // Update the sender's balance in our database
+                          await updateTokenBalance(
+                            senderWallet,
+                            tokenMint,
+                            tokenAmount,
+                            signature
+                          )
+                          
+                          // Update tokenSyncState to track the last processed transaction
+                          await updateTokenSyncState(tokenMint, signature, txTimestamp, 1)
+                          
+                          console.log(`Updated token balance for wallet ${senderWallet}`)
+                          console.log(`Recorded transaction in processedTransactions table`)
+                          console.log(`Updated tokenSyncState with latest transaction`)
+                        } else {
+                          console.log(`Detected incoming token transfer, but couldn't identify sender`)
+                        }
+                      } else if (newBalance < oldBalance) {
+                        // This is a withdrawal - also record it to prevent double processing
+                        
+                        // Check if this is a fee transaction (requires looking for multiple transfers)
+                        const serverChanges = txInfo.balanceChanges.filter(
+                          change => change.owner === this.publicKey.toString()
+                        )
+                        
+                        // If there are multiple server wallet changes, this might be a fee transaction
+                        const isMultiTransfer = serverChanges.length > 1
+                        
+                        if (isMultiTransfer && this.feeWalletAddress) {
+                          // Look for fee transfer
+                          const recipientChanges = txInfo.balanceChanges.filter(
+                            change => change.owner !== this.publicKey.toString() && change.change > 0
+                          )
+                          
+                          let recipientWallet = null
+                          let recipientAmount = 0
+                          let feeWallet = null
+                          let feeAmount = 0
+                          let isFeeTransaction = false
+                          
+                          // Check for fee transfer pattern
+                          for (const change of recipientChanges) {
+                            if (change.owner === this.feeWalletAddress) {
+                              feeWallet = change.owner
+                              feeAmount = change.change
+                              isFeeTransaction = true
+                            } else {
+                              recipientWallet = change.owner
+                              recipientAmount = change.change
+                            }
+                          }
+                          
+                          if (isFeeTransaction && recipientWallet) {
+                            // This is a fee transaction
+                            const totalAmount = recipientAmount + feeAmount
+                            
+                            // Record the transaction
+                            await recordProcessedTransaction({
+                              signature,
+                              tokenMint,
+                              type: 'withdrawal_with_fee',
+                              blockTime: txTimestamp,
+                              amount: totalAmount,
+                              feeAmount,
+                              netAmount: recipientAmount,
+                              recipientWallet,
+                              feeWallet,
+                              success: true
+                            })
+                            
+                            // Update tokenSyncState to track the last processed transaction
+                            await updateTokenSyncState(tokenMint, signature, txTimestamp, 1)
+                            
+                            console.log(`Recorded fee transaction in processedTransactions table: ${recipientAmount} to ${recipientWallet}, fee ${feeAmount} to ${feeWallet}`)
+                            console.log(`Updated tokenSyncState with latest transaction`)
+                            return
+                          }
+                        }
+                        
+                        // Standard withdrawal
                         const recipientChanges = txInfo.balanceChanges.filter(
                           change => change.owner !== this.publicKey.toString() && change.change > 0
                         )
                         
-                        let recipientWallet = null
-                        let recipientAmount = 0
-                        let feeWallet = null
-                        let feeAmount = 0
-                        let isFeeTransaction = false
-                        
-                        // Check for fee transfer pattern
-                        for (const change of recipientChanges) {
-                          if (change.owner === this.feeWalletAddress) {
-                            feeWallet = change.owner
-                            feeAmount = change.change
-                            isFeeTransaction = true
-                          } else {
-                            recipientWallet = change.owner
-                            recipientAmount = change.change
-                          }
-                        }
-                        
-                        if (isFeeTransaction && recipientWallet) {
-                          // This is a fee transaction
-                          const totalAmount = recipientAmount + feeAmount
+                        if (recipientChanges.length > 0) {
+                          const recipientWallet = recipientChanges[0].owner
+                          const amount = Math.abs(newBalance - oldBalance) / (10 ** metadata?.mint?.decimals)
                           
                           // Record the transaction
                           await recordProcessedTransaction({
                             signature,
                             tokenMint,
-                            type: 'withdrawal_with_fee',
+                            type: 'withdrawal',
                             blockTime: txTimestamp,
-                            amount: totalAmount,
-                            feeAmount,
-                            netAmount: recipientAmount,
+                            amount,
                             recipientWallet,
-                            feeWallet,
                             success: true
                           })
                           
                           // Update tokenSyncState to track the last processed transaction
                           await updateTokenSyncState(tokenMint, signature, txTimestamp, 1)
                           
-                          console.log(`Recorded fee transaction in processedTransactions table: ${recipientAmount} to ${recipientWallet}, fee ${feeAmount} to ${feeWallet}`)
+                          console.log(`Recorded withdrawal transaction in processedTransactions table: ${amount} tokens to ${recipientWallet}`)
                           console.log(`Updated tokenSyncState with latest transaction`)
-                          return
                         }
                       }
-                      
-                      // Standard withdrawal
-                      const recipientChanges = txInfo.balanceChanges.filter(
-                        change => change.owner !== this.publicKey.toString() && change.change > 0
-                      )
-                      
-                      if (recipientChanges.length > 0) {
-                        const recipientWallet = recipientChanges[0].owner
-                        const amount = Math.abs(newBalance - oldBalance) / (10 ** metadata?.mint?.decimals)
-                        
-                        // Record the transaction
-                        await recordProcessedTransaction({
-                          signature,
-                          tokenMint,
-                          type: 'withdrawal',
-                          blockTime: txTimestamp,
-                          amount,
-                          recipientWallet,
-                          success: true
-                        })
-                        
-                        // Update tokenSyncState to track the last processed transaction
-                        await updateTokenSyncState(tokenMint, signature, txTimestamp, 1)
-                        
-                        console.log(`Recorded withdrawal transaction in processedTransactions table: ${amount} tokens to ${recipientWallet}`)
-                        console.log(`Updated tokenSyncState with latest transaction`)
-                      }
                     }
+                    
+                    console.log('Token transaction detected:', txInfo)
+                    notifySubscribers(txInfo)
                   }
-                  
-                  console.log('Token transaction detected:', txInfo)
-                  notifySubscribers(txInfo)
+                } finally {
+                  // Mark this transaction as processed
+                  inProcessTransactions.delete(signature)
                 }
               }
             } catch (err) {
@@ -1146,7 +1195,7 @@ export class Solana extends System {
                     message: `Balance updated to ${newBalance}`
                   }
                 } else {
-                  return { success: false, error: 'Database update failed' }
+                  return { success: false, error: { message: 'Database update failed' } }
                 }
               } catch (err) {
                 console.error(`Error updating server balance for player ${playerId}:`, err)
