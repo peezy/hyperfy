@@ -53,6 +53,10 @@ app.configure([
     label: 'Theme',
     options: [
       {
+        label: 'Modern',
+        value: 'modern'
+      },
+      {
         label: 'Classic',
         value: 'classic'
       },
@@ -80,7 +84,7 @@ app.configure([
         value: 'gridneon'
       }
     ],
-    initial: 'classic'
+    initial: 'modern'
   },
   {
     type: 'range',
@@ -103,6 +107,16 @@ if (world.isServer) return;
 
 function getThemeColors(theme) {
   const themes = {
+    modern: {
+      backgroundColor: 'rgba(0, 0, 0, 0.7)',
+      headerBackgroundColor: 'rgba(0, 0, 0, 0.8)',
+      borderColor: 'rgba(255, 255, 255, 0.8)',
+      textColor: 'rgba(255, 255, 255, 1)',
+      textBorderColor: 'rgba(255, 255, 255, 0.6)',
+      textBackgroundColor: 'rgba(0, 0, 0, 0.5)',
+      lightTextColor: 'rgba(255, 255, 255, 1)',
+      darkTextColor: 'rgba(255, 255, 255, 1)'
+    },
     classic: {
       backgroundColor: 'rgba(0, 170, 255, 1)',
       headerBackgroundColor: 'rgba(0, 140, 210, 1)',
@@ -269,9 +283,9 @@ function createLeaderboardUI() {
     space: 'screen',
     pivot: 'bottom-left',
     backgroundColor: mainBgColor,
-    borderRadius: 2,
+    borderRadius: 12,
     borderColor: colors.borderColor,
-    borderWidth: 1,
+    borderWidth: 2,
     padding: 10,
     pointerEvents: true,
     flexDirection: 'column',
@@ -320,9 +334,9 @@ function createLeaderboardUI() {
     color: colors.textColor,
     padding: 8,
     backgroundColor: colors.textBackgroundColor,
-    borderRadius: 2,
-    borderWidth: 3,
-    borderColor: colors.textBorderColor,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: colors.borderColor,
   });
 
   const minimizeButton = app.create('uitext', {
@@ -332,9 +346,9 @@ function createLeaderboardUI() {
     color: colors.textColor,
     padding: 4,
     backgroundColor: mainBgColor,
-    borderRadius: 2,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.textBorderColor,
+    borderColor: colors.borderColor,
     position: 'absolute',
     top: 4,
     left: 4,
@@ -357,9 +371,9 @@ function createLeaderboardUI() {
     height: Math.floor(uiHeight * 0.25),
     flexDirection: 'column',
     backgroundColor: headerBgColor,
-    borderRadius: 2,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: colors.textBorderColor,
+    borderColor: colors.borderColor,
     padding: 10,
     gap: 10
   });
@@ -388,9 +402,9 @@ function createLeaderboardUI() {
       color: colors.textColor,
       padding: 6,
       backgroundColor: colors.textBackgroundColor,
-      borderRadius: 2,
+      borderRadius: 8,
       borderWidth: 1,
-      borderColor: colors.textBorderColor,
+      borderColor: colors.borderColor,
     });
 
     row.add(labelText);
@@ -410,9 +424,9 @@ function createLeaderboardUI() {
     height: Math.floor(uiHeight * 0.3),
     flexDirection: 'column',
     backgroundColor: headerBgColor,
-    borderRadius: 2,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: colors.textBorderColor,
+    borderColor: colors.borderColor,
     padding: 10,
     gap: 10
   });
@@ -450,11 +464,11 @@ function createLeaderboardUI() {
       fontSize: 14,
       textAlign: 'center',
       color: colors.lightTextColor,
-      backgroundColor: isDeposit ? 'rgba(40, 167, 69, 0.7)' : 'rgba(220, 53, 69, 0.7)',
+      backgroundColor: isDeposit ? 'rgba(0, 0, 0, 0.6)' : 'rgba(0, 0, 0, 0.6)',
       padding: 4,
-      borderRadius: 2,
+      borderRadius: 8,
       borderWidth: 1,
-      borderColor: colors.textBorderColor,
+      borderColor: colors.borderColor,
       cursor: 'pointer',
       width: Math.floor((uiWidth - 60) / 4),
       onPointerDown: () => {
@@ -501,11 +515,11 @@ function createLeaderboardUI() {
     fontSize: 16,
     textAlign: 'center',
     color: colors.lightTextColor,
-    backgroundColor: 'rgba(40, 167, 69, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     padding: 8,
-    borderRadius: 2,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.textBorderColor,
+    borderColor: colors.borderColor,
     cursor: 'pointer',
     onPointerDown: () => {
       // In a real app, this would handle the deposit action
@@ -557,9 +571,9 @@ function createLeaderboardUI() {
     height: Math.floor(uiHeight * 0.3),
     flexDirection: 'column',
     backgroundColor: headerBgColor,
-    borderRadius: 2,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: colors.textBorderColor,
+    borderColor: colors.borderColor,
     padding: 10,
     gap: 10
   });
@@ -612,11 +626,11 @@ function createLeaderboardUI() {
     fontSize: 16,
     textAlign: 'center',
     color: colors.lightTextColor,
-    backgroundColor: 'rgba(220, 53, 69, 0.9)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     padding: 8,
-    borderRadius: 2,
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.textBorderColor,
+    borderColor: colors.borderColor,
     cursor: 'pointer',
     onPointerDown: () => {
       // In a real app, this would handle the withdrawal action
@@ -680,7 +694,7 @@ function createTrophyUI() {
     space: 'screen',
     pivot: 'bottom-left',
     backgroundColor: mainBgColor,
-    borderRadius: 2,
+    borderRadius: 10,
     borderColor: colors.borderColor,
     borderWidth: 2,
     padding: 2,
@@ -697,12 +711,8 @@ function createTrophyUI() {
     }
   });
 
-  // trophyText = 
-
   trophyUI.add(trophyText);
   app.add(trophyUI);
-
-
 }
 
 
