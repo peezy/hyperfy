@@ -287,7 +287,6 @@ export class Solana extends System {
           // Track token accounts and their listeners
           const accountBalances = new Map()
           const accountListeners = new Map()
-          const subscribers = new Set()
           
           // Track transactions that are currently being processed to prevent duplicate processing
           const inProcessTransactions = new Set()
@@ -298,13 +297,16 @@ export class Solana extends System {
             return Number(data.readBigUInt64LE(64))
           }
           
-          // Function to notify subscribers about transactions
-          const notifySubscribers = txInfo => {
-            subscribers.forEach(callback => {
-              try {
-                callback(txInfo)
-              } catch (err) {
-                console.error('Error in transaction callback:', err)
+          // Function to notify about transactions by emitting world event
+          const emitTransactionEvent = txInfo => {
+            // Emit the transaction event with token details
+            this.world.events.emit('token-transaction', {
+              ...txInfo,
+              token: {
+                mint: tokenMint,
+                name: metadata?.metadata?.name,
+                symbol: metadata?.metadata?.symbol,
+                decimals: metadata?.mint?.decimals
               }
             })
           }
@@ -352,7 +354,6 @@ export class Solana extends System {
                     const txInfo = {
                       signature: signature,
                       status: signatures[0].confirmationStatus,
-                      token: tokenMint,
                       account: accountPubkey,
                       oldBalance,
                       newBalance,
@@ -450,6 +451,14 @@ export class Solana extends System {
                           // Update tokenSyncState to track the last processed transaction
                           await updateTokenSyncState(tokenMint, signature, txTimestamp, 1)
                           
+                          // Emit deposit event
+                          emitTransactionEvent({
+                            ...txInfo,
+                            type: 'deposit',
+                            amount: tokenAmount,
+                            senderWallet
+                          })
+                          
                           console.log(`Updated token balance for wallet ${senderWallet}`)
                           console.log(`Recorded transaction in processedTransactions table`)
                           console.log(`Updated tokenSyncState with latest transaction`)
@@ -512,6 +521,17 @@ export class Solana extends System {
                             // Update tokenSyncState to track the last processed transaction
                             await updateTokenSyncState(tokenMint, signature, txTimestamp, 1)
                             
+                            // Emit withdrawal with fee event
+                            emitTransactionEvent({
+                              ...txInfo,
+                              type: 'withdrawal_with_fee',
+                              amount: totalAmount,
+                              feeAmount,
+                              netAmount: recipientAmount,
+                              recipientWallet,
+                              feeWallet
+                            })
+                            
                             console.log(`Recorded fee transaction in processedTransactions table: ${recipientAmount} to ${recipientWallet}, fee ${feeAmount} to ${feeWallet}`)
                             console.log(`Updated tokenSyncState with latest transaction`)
                             return
@@ -541,6 +561,14 @@ export class Solana extends System {
                           // Update tokenSyncState to track the last processed transaction
                           await updateTokenSyncState(tokenMint, signature, txTimestamp, 1)
                           
+                          // Emit withdrawal event
+                          emitTransactionEvent({
+                            ...txInfo,
+                            type: 'withdrawal',
+                            amount,
+                            recipientWallet
+                          })
+                          
                           console.log(`Recorded withdrawal transaction in processedTransactions table: ${amount} tokens to ${recipientWallet}`)
                           console.log(`Updated tokenSyncState with latest transaction`)
                         }
@@ -548,7 +576,6 @@ export class Solana extends System {
                     }
                     
                     console.log('Token transaction detected:', txInfo)
-                    notifySubscribers(txInfo)
                   }
                 } finally {
                   // Mark this transaction as processed
@@ -1090,29 +1117,6 @@ export class Solana extends System {
             balance: walletAddress => balance({ tokenMint, walletAddress, decimals: token.decimals }),
             transfer: (recipientAddress, amount) =>
               transfer({ tokenMint, recipientAddress, amount, decimals: token.decimals }),
-            onTransaction: callback => {
-              subscribers.add(callback)
-              return {
-                unsubscribe: () => {
-                  subscribers.delete(callback)
-                  console.log(`Removed transaction callback for token: ${tokenMint}`)
-                  
-                  // If no subscribers left and no references to token, clean up
-                  if (subscribers.size === 0 && !tokens.has(tokenMint)) {
-                    // Remove all account listeners
-                    for (const [accountStr, listenerID] of accountListeners.entries()) {
-                      this.connection.removeAccountChangeListener(listenerID)
-                      console.log(`Stopped watching token account: ${accountStr}`)
-                    }
-                    
-                    // Remove program listener
-                    this.connection.removeProgramAccountChangeListener(programListener)
-                    
-                    console.log(`Stopped watching token: ${tokenMint}`)
-                  }
-                }
-              }
-            },
             getServerBalance: async (playerId) => {
               try {
                 // Get the player entity from the world
@@ -1201,6 +1205,60 @@ export class Solana extends System {
                 }
               } catch (err) {
                 console.error(`Error updating server balance for player ${playerId}:`, err)
+                return { success: false, error: err.message }
+              }
+            },
+            updateServerBalanceByAddress: async (walletAddress, newBalance, options = {}) => {
+              try {
+                // Validate wallet address
+                if (!walletAddress) {
+                  console.error('No wallet address provided')
+                  return { success: false, error: 'Wallet address is required' }
+                }
+
+                // Ensure positive balance
+                if (newBalance < 0) {
+                  return { success: false, error: 'Balance cannot be negative' }
+                }
+
+                // Get the current balance to calculate change amount
+                const balances = await getTokenBalancesForWallet(walletAddress)
+                const tokenBalance = balances.find(balance => balance.tokenMint === tokenMint)
+                const currentBalance = tokenBalance ? Number(tokenBalance.balance) : 0
+                const changeAmount = newBalance - currentBalance
+                
+                // Only proceed if there's an actual change to make
+                if (changeAmount === 0) {
+                  console.log(`No change needed for wallet ${walletAddress}, balance already at ${newBalance}`)
+                  return { 
+                    success: true, 
+                    balance: newBalance,
+                    message: `Balance already at ${newBalance}, no change made`
+                  }
+                }
+
+                // Prepare audit options with defaults
+                const auditOptions = {
+                  reason: options.reason || `Balance adjusted to ${newBalance}`,
+                  initiatedBy: options.initiatedBy || 'admin',
+                  changeType: 'adjustment'
+                }
+
+                // Update the token balance in database with the audit options
+                const success = await setTokenBalance(walletAddress, tokenMint, newBalance, auditOptions)
+                
+                if (success) {
+                  console.log(`Updated server balance for wallet ${walletAddress} to ${newBalance} ${metadata?.metadata?.symbol || tokenMint}`)
+                  return { 
+                    success: true, 
+                    balance: newBalance,
+                    message: `Balance updated to ${newBalance}`
+                  }
+                } else {
+                  return { success: false, error: { message: 'Database update failed' } }
+                }
+              } catch (err) {
+                console.error(`Error updating server balance for wallet ${walletAddress}:`, err)
                 return { success: false, error: err.message }
               }
             },
