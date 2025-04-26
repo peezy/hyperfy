@@ -52,19 +52,184 @@ const world = createServerWorld()
 
 const fastify = Fastify({ logger: { level: 'error' } })
 
-const appServer = new McpServer({
-  name: 'hyperfy-app-mcp-server',
-  version: '0.0.1',
-})
+// MCP Server setup - only if environment variable is set
+if (process.env.MCP_SERVER === 'true') {
+  // Create the MCP server instance
+  const mcpServer = registerMCPServer(world, fastify)
+  
+  // Initialize world with all dependencies including MCP
+  world.init({ db, storage, loadPhysX, mcp: mcpServer })
+  
+  // Create an auth handler function to validate tokens and return player IDs
+  const authHandler = async (authToken) => {
+    try {
+      const { userId } = await readJWT(authToken)
+      return userId
+    } catch (err) {
+      console.error('Error validating auth token for MCP:', err)
+      return null
+    }
+  }
 
-// Register MCP SSE plugin with our auth handler
-fastify.register(fastifyMCPSSE, {
-  server: appServer,
-  sseEndpoint: '/apps/sse',
-  messagesEndpoint: '/apps/messages',
-})
+  // Register MCP SSE endpoints
+  fastify.register(fastifyMCPSSE, {
+    server: mcpServer,
+    authHandler,
+    sseEndpoint: '/sse',
+    messagesEndpoint: '/messages'
+  })
 
-world.init({ db, storage, loadPhysX, mcp: appServer })
+  // Register a separate SSE endpoint for apps (for backward compatibility)
+  fastify.register(fastifyMCPSSE, {
+    server: mcpServer,
+    sseEndpoint: '/apps/sse',
+    messagesEndpoint: '/apps/messages'
+  })
+
+  // Add SSE endpoint for streaming AI responses
+  fastify.get('/mcp/stream', async (req, reply) => {
+    try {
+      // Get auth token from query parameter or header
+      const authToken = req.query.authToken || req.headers.authorization?.replace('Bearer ', '')
+
+      if (!authToken) {
+        reply.code(401).send({ error: 'Authentication required' })
+        return
+      }
+
+      // Validate token and get user
+      let userId = null
+
+      try {
+        // Verify JWT token
+        const { userId: tokenUserId } = await readJWT(authToken)
+        userId = tokenUserId
+
+        // Get player from world entities
+        const player = world.entities.getPlayer(userId)
+
+        if (!player) {
+          reply.code(403).send({ error: 'Player not found' })
+          return
+        }
+
+        // Check if user has admin permissions using ServerNetwork's isAdmin method
+        if (!world.network.isAdmin(player) && !world.settings.public) {
+          reply.code(403).send({ error: 'Unauthorized' })
+          return
+        }
+
+      } catch (err) {
+        console.error('Failed to authenticate user for MCP stream:', err)
+        reply.code(401).send({ error: 'Invalid authentication token' })
+        return
+      }
+
+      // Set SSE headers
+      reply.raw.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive'
+      })
+
+      const sendEvent = (event, data) => {
+        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+      }
+
+      // Set up event handlers for this request - only process events for this user
+      const onStart = (data) => {
+        if (data.userId === userId || !data.userId) {
+          sendEvent('start', data)
+        }
+      }
+
+      const onStatus = (data) => {
+        if (data.userId === userId || !data.userId) {
+          sendEvent('status', data)
+        }
+      }
+
+      const onText = (data) => {
+        if (data.userId === userId || !data.userId) {
+          sendEvent('text', data)
+        }
+      }
+
+      const onToolStart = (data) => {
+        if (data.userId === userId || !data.userId) {
+          sendEvent('tool_start', data)
+        }
+      }
+
+      const onToolResult = (data) => {
+        if (data.userId === userId || !data.userId) {
+          sendEvent('tool_result', data)
+        }
+      }
+
+      const onToolError = (data) => {
+        if (data.userId === userId || !data.userId) {
+          sendEvent('tool_error', data)
+        }
+      }
+
+      const onComplete = (data) => {
+        if (data.userId === userId || !data.userId) {
+          sendEvent('complete', data)
+          reply.raw.end()
+
+          // Clean up event listeners
+          mcpClient.removeListener('start', onStart)
+          mcpClient.removeListener('status', onStatus)
+          mcpClient.removeListener('text', onText)
+          mcpClient.removeListener('tool_start', onToolStart)
+          mcpClient.removeListener('tool_result', onToolResult)
+          mcpClient.removeListener('tool_error', onToolError)
+          mcpClient.removeListener('complete', onComplete)
+        }
+      }
+
+      // Register event listeners
+      mcpClient.on('start', onStart)
+      mcpClient.on('status', onStatus)
+      mcpClient.on('text', onText)
+      mcpClient.on('tool_start', onToolStart)
+      mcpClient.on('tool_result', onToolResult)
+      mcpClient.on('tool_error', onToolError)
+      mcpClient.on('complete', onComplete)
+
+      // Handle client disconnect
+      req.raw.on('close', () => {
+        mcpClient.removeListener('start', onStart)
+        mcpClient.removeListener('status', onStatus)
+        mcpClient.removeListener('text', onText)
+        mcpClient.removeListener('tool_start', onToolStart)
+        mcpClient.removeListener('tool_result', onToolResult)
+        mcpClient.removeListener('tool_error', onToolError)
+        mcpClient.removeListener('complete', onComplete)
+      })
+
+      // Process the query from the URL parameter
+      const query = req.query.query
+      if (query) {
+        // Add user context to the query processing
+        mcpClient.processQueryStream(query, userId).catch(error => {
+          sendEvent('error', { error: error.message })
+          reply.raw.end()
+        })
+      } else {
+        sendEvent('error', { error: 'Missing query parameter' })
+        reply.raw.end()
+      }
+    } catch (err) {
+      console.error('Error in MCP stream endpoint:', err)
+      reply.code(500).send({ error: 'Internal server error' })
+    }
+  })
+} else {
+  // Initialize world without MCP if the environment variable is not set
+  world.init({ db, storage, loadPhysX })
+}
 
 fastify.register(cors)
 fastify.register(compress)
@@ -205,169 +370,6 @@ async function worldNetwork(fastify) {
   })
 }
 
-if (process.env.MCP_SERVER === 'true') {
-  // Create the MCP server instance
-  const mcpServer = registerMCPServer(world, fastify)
-
-  // Create an auth handler function to validate tokens and return player IDs
-  const authHandler = async (authToken) => {
-    try {
-      const { userId } = await readJWT(authToken)
-      return userId
-    } catch (err) {
-      console.error('Error validating auth token for MCP:', err)
-      return null
-    }
-  }
-
-  // Register MCP SSE plugin with our auth handler
-  fastify.register(fastifyMCPSSE, {
-    server: mcpServer.server,
-    authHandler
-  })
-
-  // Add new SSE endpoint for streaming AI responses
-  fastify.get('/mcp/stream', async (req, reply) => {
-    try {
-      // Get auth token from query parameter or header
-      const authToken = req.query.authToken || req.headers.authorization?.replace('Bearer ', '')
-
-      if (!authToken) {
-        reply.code(401).send({ error: 'Authentication required' })
-        return
-      }
-
-      // Validate token and get user
-      let userId = null
-
-      try {
-        // Verify JWT token
-        const { userId: tokenUserId } = await readJWT(authToken)
-        userId = tokenUserId
-
-        // Get player from world entities
-        const player = world.entities.getPlayer(userId)
-
-        if (!player) {
-          reply.code(403).send({ error: 'Player not found' })
-          return
-        }
-
-        // Check if user has admin permissions using ServerNetwork's isAdmin method
-        if (!world.network.isAdmin(player) && !world.settings.public) {
-          reply.code(403).send({ error: 'Unauthorized' })
-          return
-        }
-
-      } catch (err) {
-        console.error('Failed to authenticate user for MCP stream:', err)
-        reply.code(401).send({ error: 'Invalid authentication token' })
-        return
-      }
-
-      // Set SSE headers
-      reply.raw.writeHead(200, {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        'Connection': 'keep-alive'
-      })
-
-      const sendEvent = (event, data) => {
-        reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-      }
-
-      // Set up event handlers for this request - only process events for this user
-      const onStart = (data) => {
-        if (data.userId === userId || !data.userId) {
-          sendEvent('start', data)
-        }
-      }
-
-      const onStatus = (data) => {
-        if (data.userId === userId || !data.userId) {
-          sendEvent('status', data)
-        }
-      }
-
-      const onText = (data) => {
-        if (data.userId === userId || !data.userId) {
-          sendEvent('text', data)
-        }
-      }
-
-      const onToolStart = (data) => {
-        if (data.userId === userId || !data.userId) {
-          sendEvent('tool_start', data)
-        }
-      }
-
-      const onToolResult = (data) => {
-        if (data.userId === userId || !data.userId) {
-          sendEvent('tool_result', data)
-        }
-      }
-
-      const onToolError = (data) => {
-        if (data.userId === userId || !data.userId) {
-          sendEvent('tool_error', data)
-        }
-      }
-
-      const onComplete = (data) => {
-        if (data.userId === userId || !data.userId) {
-          sendEvent('complete', data)
-          reply.raw.end()
-
-          // Clean up event listeners
-          mcpClient.removeListener('start', onStart)
-          mcpClient.removeListener('status', onStatus)
-          mcpClient.removeListener('text', onText)
-          mcpClient.removeListener('tool_start', onToolStart)
-          mcpClient.removeListener('tool_result', onToolResult)
-          mcpClient.removeListener('tool_error', onToolError)
-          mcpClient.removeListener('complete', onComplete)
-        }
-      }
-
-      // Register event listeners
-      mcpClient.on('start', onStart)
-      mcpClient.on('status', onStatus)
-      mcpClient.on('text', onText)
-      mcpClient.on('tool_start', onToolStart)
-      mcpClient.on('tool_result', onToolResult)
-      mcpClient.on('tool_error', onToolError)
-      mcpClient.on('complete', onComplete)
-
-      // Handle client disconnect
-      req.raw.on('close', () => {
-        mcpClient.removeListener('start', onStart)
-        mcpClient.removeListener('status', onStatus)
-        mcpClient.removeListener('text', onText)
-        mcpClient.removeListener('tool_start', onToolStart)
-        mcpClient.removeListener('tool_result', onToolResult)
-        mcpClient.removeListener('tool_error', onToolError)
-        mcpClient.removeListener('complete', onComplete)
-      })
-
-      // Process the query from the URL parameter
-      const query = req.query.query
-      if (query) {
-        // Add user context to the query processing
-        mcpClient.processQueryStream(query, userId).catch(error => {
-          sendEvent('error', { error: error.message })
-          reply.raw.end()
-        })
-      } else {
-        sendEvent('error', { error: 'Missing query parameter' })
-        reply.raw.end()
-      }
-    } catch (err) {
-      console.error('Error in MCP stream endpoint:', err)
-      reply.code(500).send({ error: 'Internal server error' })
-    }
-  })
-}
-
 // Start the server
 try {
   await fastify.listen({ port, host: '0.0.0.0' })
@@ -379,8 +381,10 @@ try {
 
 console.log(`running on port ${port}`)
 
-mcpClient.connectToServer('http://localhost:3000/sse')
-
+// Connect mcpClient only if MCP_SERVER is true
+if (process.env.MCP_SERVER === 'true') {
+  mcpClient.connectToServer(`http://localhost:${port}/sse`)
+}
 
 // Graceful shutdown
 process.on('SIGINT', async () => {

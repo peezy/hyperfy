@@ -8,7 +8,6 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
 if (!ANTHROPIC_API_KEY) {
   throw new Error('ANTHROPIC_API_KEY is not set')
 }
-console.log('ANTHROPIC_API_KEY:', ANTHROPIC_API_KEY)
 
 export class McpClient extends EventEmitter {
   mcp
@@ -149,6 +148,25 @@ export class McpClient extends EventEmitter {
      * @returns Processed response as a string
      */
     console.log(`Processing query: "${query}" for user: ${userId || 'anonymous'}`)
+    
+    // Refresh the tools list at the start of each conversation
+    try {
+      console.log('Refreshing available tools list...')
+      const toolsResult = await this.mcp.listTools()
+      this.tools = toolsResult.tools.map(tool => {
+        return {
+          name: tool.name,
+          description: tool.description,
+          input_schema: tool.inputSchema,
+        }
+      })
+      console.log(`Tools refreshed, found ${this.tools.length} available tools:`, 
+        this.tools.map(({ name }) => name).join(', '))
+    } catch (error) {
+      console.error('Error refreshing tools list:', error)
+      // Continue with existing tools if refresh fails
+    }
+    
     this.emit('start', { query, userId })
     
     // Try to get scripting rules and prepare system prompt

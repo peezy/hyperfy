@@ -9,29 +9,33 @@ export class MCP extends System {
   }
 
   async init({ mcp }) {
-    // console.log('[MCP] Init:', fastify)
-
     try {
-      // Dynamically import mcp to avoid issues on client-side
+      // Use the mcp server instance if provided
+      if (mcp) {
+        console.log('[MCP] Using provided MCP server')
+        this.mcp = mcp
+      } else {
+        console.log('[MCP] No MCP server provided')
+      }
 
-      // Create a new MCP server
-      this.mcp = mcp
-
-      this.mcp.tool(
-        'greet',
-        {
-          name: z.string().describe('Name of the person to greet'),
-        },
-        ({ name }) => {
-          return {
-            content: [{ type: 'text', text: `Hello ${name}!` }],
+      // Register a demo greeting tool if we have a server
+      if (this.mcp) {
+        this.mcp.tool(
+          'greet',
+          {
+            name: z.string().describe('Name of the person to greet'),
+          },
+          ({ name }) => {
+            return {
+              content: [{ type: 'text', text: `Hello ${name}!` }],
+            }
           }
-        }
-      )
-
-      console.log('[MCP] Server initialized successfully')
+        )
+        console.log('[MCP] Demo tool "greet" registered')
+        console.log('[MCP] Server initialized successfully')
+      }
     } catch (err) {
-      console.error('[MCP] Failed to create server:', err)
+      console.error('[MCP] Failed to initialize server:', err)
     }
 
     // Inject the registerMCPTool method into the app runtime
