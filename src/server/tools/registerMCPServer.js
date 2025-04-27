@@ -1,10 +1,7 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import Database from 'better-sqlite3'
 import fs from 'fs-extra'
 import path from 'path'
-import crypto from 'crypto'
 
-import { fastifyMCPSSE } from './mcp-sse-plugin'
 import { z } from 'zod'
 import { hashFile } from '../../core/utils-server'
 import { uuid } from '../../core/utils'
@@ -288,12 +285,7 @@ function findScriptingRulesFile() {
   return null;
 }
 
-export function registerMCPServer(world, fastify) {
-  const mcpServer = new McpServer({
-    name: 'hyperfy-mcp-server',
-    version: '0.0.1',
-  })
-
+export function registerMCPServer(world, mcpServer) {
   // Register the scripting rules as a static resource
   console.log(`Registering scripting rules resource from path: ${scriptingRulesPath}`)
   const scriptingRulesFilePath = findScriptingRulesFile();
