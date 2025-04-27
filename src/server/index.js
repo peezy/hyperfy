@@ -23,7 +23,7 @@ import { Storage } from './Storage'
 import { fileURLToPath } from 'url'
 import { AIClient } from './ai-client.js'
 import { readJWT } from '../core/utils-server'
-import { fastifyMCPSSE } from './tools/mcp-sse-plugin.js'
+import { fastifyMCPSSE } from './mcp-fastify-plugin.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 const mcpClient = new AIClient()
