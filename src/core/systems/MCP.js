@@ -1,5 +1,12 @@
 import { System } from './System'
+
+import Database from 'better-sqlite3'
+import fs from 'fs-extra'
+import path from 'path'
+
 import { z } from 'zod'
+import { hashFile } from '../../core/utils-server'
+import { uuid } from '../../core/utils'
 
 export class MCP extends System {
   constructor(world) {
@@ -20,18 +27,9 @@ export class MCP extends System {
 
       // Register a demo greeting tool if we have a server
       if (this.mcp) {
-        this.mcp.tool(
-          'greet',
-          {
-            name: z.string().describe('Name of the person to greet'),
-          },
-          ({ name }) => {
-            return {
-              content: [{ type: 'text', text: `Hello ${name}!` }],
-            }
-          }
-        )
-        console.log('[MCP] Demo tool "greet" registered')
+
+        registerBuilderTools(this.world, this.mcp)
+
         console.log('[MCP] Server initialized successfully')
       }
     } catch (err) {
@@ -174,5 +172,917 @@ export class MCP extends System {
   // Method to get the MCP server instance, useful for integration with fastify later
   getmcp() {
     return this.mcp
+  }
+}
+
+
+
+
+const rootDir = path.join(__dirname, '../')
+const worldDir = path.join(rootDir, process.env.WORLD)
+const assetsDir = path.join(worldDir, '/assets')
+const docsDir = path.join(rootDir, './docs')
+const repoRootDir = path.join(rootDir, '../../')
+const scriptingRulesPath = path.join(repoRootDir, 'docs/scripting-rules.md')
+
+// =====================================
+// MCP Server Implementation Below
+// =====================================
+// Helper function to get the SQLite DB path (uses the same world dir as the main server)
+const getDbPathForMCP = () => {
+  // If environment variable is provided, use that
+  if (process.env.SQLITE_DB_PATH) {
+    console.log(`Using DB path from env: ${process.env.SQLITE_DB_PATH}`)
+    return process.env.SQLITE_DB_PATH
+  }
+
+  // Otherwise use the same DB path as the main server
+  const dbPath = path.join(worldDir, '/db.sqlite')
+  console.log(`Resolved DB path: ${dbPath}`)
+  return dbPath
+}
+
+/**
+ * Saves a file to the assets directory and returns its hash and URL
+ * @param {Buffer|String} content - The file content to save
+ * @param {String} extension - The file extension (e.g., 'js', 'glb')
+ * @returns {Promise<{hash: String, url: String, filePath: String}>}
+ */
+async function saveAssetFile(content, extension) {
+  // Create a buffer from the content if it's a string
+  const buffer = typeof content === 'string' ? Buffer.from(content) : content
+  
+  // Hash the buffer
+  const hash = await hashFile(buffer)
+  
+  // Use hash as filename with the proper extension
+  const filename = `${hash}.${extension}`
+  
+  // Canonical URL to this file
+  const url = `asset://${filename}`
+  
+  // Save file to assets directory
+  const filePath = path.join(assetsDir, filename)
+  const exists = await fs.exists(filePath)
+  if (!exists) {
+    await fs.writeFile(filePath, buffer)
+  }
+  
+  return { hash, url, filePath }
+}
+
+/**
+ * Updates a blueprint with a new script file
+ * @param {Object} world - The world instance
+ * @param {Object} blueprint - The blueprint to update
+ * @param {String} scriptContent - The script file content
+ * @returns {Promise<Object>} The updated blueprint data
+ */
+async function updateBlueprintScript(world, blueprint, scriptContent) {
+  try {
+    // Create a buffer from the script content
+    const buffer = Buffer.from(scriptContent)
+
+    // Hash the buffer
+    const hash = await hashFile(buffer)
+
+    // Use hash as script filename
+    const filename = `${hash}.js`
+
+    // Canonical URL to this file
+    const url = `asset://${filename}`
+
+    // Save file to assets directory
+    const filePath = path.join(assetsDir, filename)
+    const exists = await fs.exists(filePath)
+    if (!exists) {
+      await fs.writeFile(filePath, buffer)
+    }
+
+    // Update blueprint version and script
+    const version = blueprint.version + 1
+
+    // Update blueprint locally (also rebuilds apps)
+    world.blueprints.modify({
+      id: blueprint.id,
+      version,
+      script: url,
+    })
+
+    // Mark the blueprint as dirty for saving
+    world.network.dirtyBlueprints.add(blueprint.id)
+
+    // Broadcast blueprint change to connected clients
+    world.network.send('blueprintModified', {
+      id: blueprint.id,
+      version,
+      script: url,
+    })
+
+    return {
+      id: blueprint.id,
+      version,
+      script: url
+    }
+  } catch (err) {
+    console.error('Error in updateBlueprintScript:', err)
+    throw err
+  }
+}
+
+// Common response formatter for consistency
+function formatResponse(data, error = null) {
+  console.log(`[DEBUG] formatResponse: Formatting response with error=${!!error}`);
+  
+  if (error) {
+    console.log(`[DEBUG] formatResponse: Error details:`, error);
+    const response = {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          success: false,
+          error: error.message || error,
+          details: error.stack
+        }, null, 2)
+      }],
+      isError: true
+    };
+    console.log(`[DEBUG] formatResponse: Returning error response:`, JSON.stringify(response, null, 2));
+    return response;
+  }
+
+  const response = {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        success: true,
+        data
+      }, null, 2)
+    }]
+  };
+  console.log(`[DEBUG] formatResponse: Returning success response with data type=${typeof data}, length=${Array.isArray(data) ? data.length : 'N/A'}`);
+  return response;
+}
+
+/**
+ * Searches for documentation files in the docs directory that match a query
+ * @param {string} query - The search query
+ * @returns {Promise<Array<{file: string, content: string, matchCount: number}>>} Matching documentation files
+ */
+async function searchDocs(query) {
+  try {
+    if (!query) return []
+    
+    // Normalize the query to lowercase for case-insensitive matching
+    const normalizedQuery = query.toLowerCase()
+    
+    // Get all markdown files in the docs directory
+    const files = await fs.readdir(docsDir)
+    const mdFiles = files.filter(file => file.endsWith('.md'))
+    
+    // Check subdirectories
+    const subdirs = (await fs.readdir(docsDir, { withFileTypes: true }))
+      .filter(dirent => dirent.isDirectory())
+      .map(dirent => dirent.name)
+    
+    // Gather all markdown files from subdirectories
+    for (const subdir of subdirs) {
+      try {
+        const subdirFiles = await fs.readdir(path.join(docsDir, subdir))
+        const subdirMdFiles = subdirFiles
+          .filter(file => file.endsWith('.md'))
+          .map(file => path.join(subdir, file))
+        mdFiles.push(...subdirMdFiles)
+      } catch (err) {
+        console.error(`Error reading subdir ${subdir}:`, err)
+      }
+    }
+    
+    // Read each file and check for matches
+    const results = []
+    
+    for (const file of mdFiles) {
+      try {
+        const filePath = path.join(docsDir, file)
+        const content = await fs.readFile(filePath, 'utf8')
+        
+        // Count how many times the query appears in the content
+        const matchCount = (content.toLowerCase().match(new RegExp(normalizedQuery, 'g')) || []).length
+        
+        // If there are matches, add to results
+        if (matchCount > 0) {
+          results.push({
+            file,
+            content,
+            matchCount
+          })
+        }
+      } catch (err) {
+        console.error(`Error reading file ${file}:`, err)
+      }
+    }
+    
+    // Sort by relevance (match count)
+    return results.sort((a, b) => b.matchCount - a.matchCount)
+  } catch (err) {
+    console.error('Error in searchDocs:', err)
+    throw err
+  }
+}
+
+/**
+ * Creates a new entity in the world based on a blueprint
+ * @param {Object} world - The world instance
+ * @param {String} blueprintId - The ID of the blueprint to use
+ * @param {Array<number>} position - Position [x, y, z]
+ * @param {Array<number>} quaternion - Rotation as quaternion [x, y, z, w]
+ * @param {String} creatorId - ID of the player creating the entity (optional)
+ * @returns {Promise<Object>} The created entity
+ */
+async function createEntity(world, blueprintId, position, quaternion, creatorId = null) {
+  try {
+    // Check if blueprint exists
+    const blueprint = world.blueprints.get(blueprintId)
+    if (!blueprint) {
+      throw new Error(`Blueprint with ID ${blueprintId} not found`)
+    }
+
+    // Create entity data
+    const entityData = {
+      id: uuid(),
+      type: 'app',
+      blueprint: blueprintId,
+      position: position || [0, 0, 0],
+      quaternion: quaternion || [0, 0, 0, 1],
+      mover: null,
+      uploader: null,
+      pinned: false,
+      state: {},
+    }
+
+    // If creator ID is provided, add it to the entity data
+    if (creatorId) {
+      entityData.creatorId = creatorId
+    }
+
+    // Add the entity to the world
+    const entity = world.entities.add(entityData, true)
+
+    return entity
+  } catch (err) {
+    console.error('Error in createEntity:', err)
+    throw err
+  }
+}
+
+// Helper function to find the correct path for the scripting rules file
+function findScriptingRulesFile() {
+  const possiblePaths = [
+    scriptingRulesPath,
+    path.join(rootDir, '../../docs/scripting-rules.md'),
+    path.join(rootDir, '../docs/scripting-rules.md'),
+    path.join(docsDir, 'scripting-rules.md'),
+    path.join(repoRootDir, 'docs/scripting-rules.md')
+  ];
+  
+  for (const filePath of possiblePaths) {
+    if (fs.existsSync(filePath)) {
+      console.log(`Found scripting rules at: ${filePath}`);
+      return filePath;
+    }
+  }
+  
+  console.error("Could not find scripting-rules.md in any expected location");
+  return null;
+}
+
+export function registerBuilderTools(world, mcpServer) {
+  // Register the scripting rules as a static resource
+  console.log(`Registering scripting rules resource from path: ${scriptingRulesPath}`)
+  const scriptingRulesFilePath = findScriptingRulesFile();
+  
+  if (scriptingRulesFilePath) {
+    mcpServer.resource(
+      "scripting-rules",
+      "hyperfy://scripting-rules",
+      async (uri) => {
+        try {
+          // Read the markdown file
+          const markdown = await fs.readFile(scriptingRulesFilePath, 'utf8')
+          console.log(`Successfully loaded scripting rules (${markdown.length} characters)`)
+
+          return {
+            contents: [{
+              uri: uri.href,
+              text: markdown
+            }]
+          }
+        } catch (error) {
+          console.error('Error reading scripting rules file:', error)
+          return {
+            contents: [{
+              uri: uri.href,
+              text: `# Scripting Rules\n\nError: ${error.message}`
+            }]
+          }
+        }
+      }
+    )
+  } else {
+    console.error('Could not register scripting rules resource - file not found')
+    // Register a placeholder resource with an error message
+    mcpServer.resource(
+      "scripting-rules",
+      "hyperfy://scripting-rules",
+      async (uri) => ({
+        contents: [{
+          uri: uri.href,
+          text: "# Scripting Rules\n\nError: Documentation file not found"
+        }]
+      })
+    )
+  }
+
+  // Register the get-entity-script tool
+  mcpServer.tool(
+    'get-entity-script',
+    {
+      entityId: z.string().describe('ID of the entity to get script from'),
+    },
+    async ({ entityId }) => {
+      console.log(`[DEBUG] get-entity-script: Starting for entityId=${entityId}`);
+      let db = null;
+      try {
+        const dbPath = getDbPathForMCP()
+        console.log(`[DEBUG] get-entity-script: Using database at ${dbPath}`);
+        db = new Database(dbPath)
+
+        // Get entity and blueprint data in a single query
+        const query = `
+          SELECT 
+            e.id as entityId,
+            e.data as entityData,
+            b.id as blueprintId,
+            b.data as blueprintData
+          FROM entities e
+          LEFT JOIN blueprints b ON json_extract(e.data, '$.blueprint') = b.id
+          WHERE e.id = ?
+        `;
+        console.log(`[DEBUG] get-entity-script: Executing query for entity ${entityId}`);
+        const result = db.prepare(query).get(entityId);
+
+        if (!result) {
+          console.log(`[DEBUG] get-entity-script: No entity found with ID ${entityId}`);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error: Entity with ID ${entityId} not found`,
+              },
+            ],
+            isError: true,
+          }
+        }
+
+        console.log(`[DEBUG] get-entity-script: Found entity and blueprint data`);
+        // Parse the JSON data
+        const entityData = JSON.parse(result.entityData);
+        const blueprintData = JSON.parse(result.blueprintData);
+        console.log(`[DEBUG] get-entity-script: Blueprint ID=${blueprintData.id}`);
+
+        // Get the script URL from the blueprint
+        const scriptUrl = blueprintData.script;
+        if (!scriptUrl) {
+          console.log(`[DEBUG] get-entity-script: No script URL found for app ${result.blueprintId}`);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error: No script found for app ${result.blueprintId}`,
+              },
+            ],
+            isError: true,
+          }
+        }
+
+        // Extract filename from asset:// URL
+        const filename = scriptUrl.replace('asset://', '')
+        const scriptPath = path.join(assetsDir, filename)
+        console.log(`[DEBUG] get-entity-script: Reading script from ${scriptPath}`);
+
+        // Read the script file
+        const scriptContent = await fs.readFile(scriptPath, 'utf8')
+        console.log(`[DEBUG] get-entity-script: Successfully read script file (${scriptContent.length} chars)`);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: scriptContent,
+            },
+          ],
+          metadata: {
+            entity: entityData,
+            app: blueprintData
+          }
+        }
+      } catch (err) {
+        console.error(`[ERROR] get-entity-script: Failed with error:`, err);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${err.message}`,
+            },
+          ],
+          isError: true,
+        }
+      } finally {
+        if (db) {
+          console.log(`[DEBUG] get-entity-script: Closing database connection`);
+          db.close()
+        }
+      }
+    }
+  )
+
+  // Register the update-blueprint-script tool
+  mcpServer.tool(
+    'update-app-script',
+    {
+      blueprintId: z.string().describe('ID of the app to update'),
+      scriptContent: z.string().describe('New script content to apply to the app'),
+    },
+    async ({ blueprintId, scriptContent }) => {
+      console.log(`[DEBUG] update-app-script: Starting for blueprintId=${blueprintId}`);
+      try {
+        // Find the blueprint by ID
+        const blueprint = world.blueprints.get(blueprintId)
+        console.log(`[DEBUG] update-app-script: Looking up blueprint`);
+
+        if (!blueprint) {
+          console.log(`[DEBUG] update-app-script: Blueprint not found with ID ${blueprintId}`);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error: App with ID ${blueprintId} not found`,
+              },
+            ],
+            isError: true,
+          }
+        }
+
+        console.log(`[DEBUG] update-app-script: Found blueprint, updating script`);
+        // Use the updateBlueprintScript function to update the blueprint
+        const result = await updateBlueprintScript(world, blueprint, scriptContent)
+        console.log(`[DEBUG] update-app-script: Script updated successfully, new version=${result.version}`);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                data: {
+                  appId: result.id,
+                  version: result.version,
+                  script: result.script
+                }
+              }, null, 2)
+            },
+          ],
+        }
+      } catch (err) {
+        console.error(`[ERROR] update-app-script: Failed with error:`, err);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${err.message}`,
+            },
+          ],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // Enhanced blueprint search tool with more search options
+  mcpServer.tool(
+    'get-app-scripts',
+    {
+      searchQuery: z.object({
+        name: z.string().optional().describe('Search by app name'),
+        author: z.string().optional().describe('Search by app author'),
+        desc: z.string().optional().describe('Search in app description'),
+        id: z.string().optional().describe('Search by exact app ID'),
+        customQuery: z.string().optional().describe('Custom SQL WHERE clause for blueprint data'),
+        props: z.record(z.any()).optional().describe('Search by app props'),
+        tags: z.array(z.string()).optional().describe('Search by app tags'),
+        modifiedSince: z.string().optional().describe('Find apps modified since date'),
+        scriptContains: z.string().optional().describe('Search in script content')
+      }).describe('Search criteria for finding apps'),
+      includeEntities: z.boolean().default(false).describe('Whether to include entities using these apps'),
+      includeScripts: z.boolean().default(true).describe('Whether to include script content'),
+      limit: z.number().optional().default(100).describe('Maximum number of results')
+    },
+    async ({ searchQuery, includeEntities = false, includeScripts = true, limit = 100 }) => {
+      console.log(`[DEBUG] get-app-scripts: Starting search with criteria:`, JSON.stringify(searchQuery));
+      let db = null;
+      try {
+        const dbPath = getDbPathForMCP()
+        console.log(`[DEBUG] get-app-scripts: Using database at ${dbPath}`);
+        db = new Database(dbPath)
+
+        const conditions = [];
+        const params = [];
+
+        // Enhanced search conditions
+        if (searchQuery.id) {
+          conditions.push('b.id = ?');
+          params.push(searchQuery.id);
+        }
+        if (searchQuery.name) {
+          conditions.push("json_extract(b.data, '$.name') LIKE ?");
+          params.push(`%${searchQuery.name}%`);
+        }
+        if (searchQuery.author) {
+          conditions.push("json_extract(b.data, '$.author') LIKE ?");
+          params.push(`%${searchQuery.author}%`);
+        }
+        if (searchQuery.desc) {
+          conditions.push("json_extract(b.data, '$.desc') LIKE ?");
+          params.push(`%${searchQuery.desc}%`);
+        }
+        if (searchQuery.props) {
+          Object.entries(searchQuery.props).forEach(([key, value]) => {
+            conditions.push(`json_extract(b.data, '$.props.${key}') = ?`);
+            params.push(value);
+          });
+        }
+        if (searchQuery.tags) {
+          const tagConditions = searchQuery.tags.map(tag => {
+            params.push(`%${tag}%`);
+            return "json_extract(b.data, '$.tags') LIKE ?";
+          });
+          conditions.push(`(${tagConditions.join(' OR ')})`);
+        }
+        if (searchQuery.modifiedSince) {
+          conditions.push('b.updatedAt > ?');
+          params.push(searchQuery.modifiedSince);
+        }
+        if (searchQuery.customQuery) {
+          conditions.push(searchQuery.customQuery);
+        }
+
+        console.log(`[DEBUG] get-app-scripts: Built ${conditions.length} search conditions with ${params.length} parameters`);
+
+        const whereClause = conditions.length > 0 
+          ? 'WHERE ' + conditions.join(' AND ')
+          : '';
+
+        let query = `
+          SELECT 
+            b.id as blueprintId,
+            json(b.data) as blueprintData,
+            b.updatedAt
+          FROM blueprints b
+          ${whereClause}
+          LIMIT ${limit}
+        `;
+
+        if (includeEntities) {
+          query = `
+            WITH matching_blueprints AS (${query})
+            SELECT 
+              mb.blueprintId,
+              mb.blueprintData,
+              mb.updatedAt,
+              COALESCE(
+                json_group_array(
+                  CASE WHEN e.id IS NOT NULL THEN
+                    json_object(
+                      'id', e.id,
+                      'data', json(e.data)
+                    )
+                  ELSE NULL END
+                ),
+                '[]'
+              ) as entities
+            FROM matching_blueprints mb
+            LEFT JOIN entities e ON json_extract(e.data, '$.blueprint') = mb.blueprintId
+            GROUP BY mb.blueprintId
+          `;
+        }
+
+        console.log(`[DEBUG] get-app-scripts: Executing query`);
+        const results = db.prepare(query).all(...params);
+        console.log(`[DEBUG] get-app-scripts: Found ${results.length} results`);
+        
+        if (!results || results.length === 0) {
+          console.log(`[DEBUG] get-app-scripts: No results found`);
+          return formatResponse({ 
+            message: 'No apps found matching the search criteria',
+            searchQuery 
+          });
+        }
+
+        console.log(`[DEBUG] get-app-scripts: Processing results`);
+        const processedResults = await Promise.all(results.map(async (result) => {
+          try {
+            const blueprintData = typeof result.blueprintData === 'string' 
+              ? JSON.parse(result.blueprintData)
+              : result.blueprintData;
+
+            const response = {
+              app: blueprintData,
+              updatedAt: result.updatedAt,
+              entities: includeEntities ? parseEntities(result.entities) : null
+            };
+
+            if (includeScripts) {
+              const scriptUrl = blueprintData.script;
+              if (scriptUrl) {
+                const filename = scriptUrl.replace('asset://', '');
+                const scriptPath = path.join(assetsDir, filename);
+                console.log(`[DEBUG] get-app-scripts: Reading script for blueprint ${blueprintData.id} from ${scriptPath}`);
+                
+                if (await fs.exists(scriptPath)) {
+                  const scriptContent = await fs.readFile(scriptPath, 'utf8');
+                  
+                  // Filter by script content if requested
+                  if (searchQuery.scriptContains && !scriptContent.includes(searchQuery.scriptContains)) {
+                    console.log(`[DEBUG] get-app-scripts: Script content filter did not match for ${blueprintData.id}`);
+                    return null;
+                  }
+                  
+                  response.script = scriptContent;
+                } else {
+                  console.log(`[DEBUG] get-app-scripts: Script file not found for ${blueprintData.id}`);
+                  response.error = `Script file not found: ${filename}`;
+                }
+              } else {
+                console.log(`[DEBUG] get-app-scripts: No script URL in blueprint ${blueprintData.id}`);
+                response.error = 'No script URL in app';
+              }
+            }
+
+            return response;
+          } catch (err) {
+            console.error(`[ERROR] get-app-scripts: Error processing blueprint result:`, err);
+            return {
+              app: result.blueprintId,
+              error: `Failed to process app: ${err.message}`
+            };
+          }
+        }));
+
+        // Filter out null results (from script content filtering)
+        const filteredResults = processedResults.filter(r => r !== null);
+        console.log(`[DEBUG] get-app-scripts: Returning ${filteredResults.length} processed results`);
+        
+        return formatResponse(filteredResults);
+      } catch (err) {
+        console.error(`[ERROR] get-app-scripts: Failed with error:`, err);
+        return formatResponse(null, err);
+      } finally {
+        if (db) {
+          console.log(`[DEBUG] get-app-scripts: Closing database connection`);
+          db.close();
+        }
+      }
+    }
+  )
+
+  // New tool: Get all entities using a specific script
+  mcpServer.tool(
+    'find-app-script-usage',
+    {
+      scriptHash: z.string().optional().describe('Find entities using this script hash'),
+      scriptContent: z.string().optional().describe('Find entities with scripts containing this content'),
+      blueprintProps: z.record(z.any()).optional().describe('Additional app properties to match')
+    },
+    async ({ scriptHash, scriptContent, blueprintProps }) => {
+      console.log(`[DEBUG] find-app-script-usage: Starting search with hash=${scriptHash}, hasContent=${!!scriptContent}`);
+      let db = null;
+      try {
+        if (!scriptHash && !scriptContent) {
+          throw new Error('Either scriptHash or scriptContent must be provided');
+        }
+
+        const dbPath = getDbPathForMCP()
+        console.log(`[DEBUG] find-app-script-usage: Using database at ${dbPath}`);
+        db = new Database(dbPath)
+
+        const conditions = [];
+        const params = [];
+
+        if (scriptHash) {
+          conditions.push("json_extract(b.data, '$.script') LIKE ?");
+          params.push(`%${scriptHash}%`);
+        }
+
+        if (blueprintProps) {
+          Object.entries(blueprintProps).forEach(([key, value]) => {
+            conditions.push(`json_extract(b.data, '$.props.${key}') = ?`);
+            params.push(value);
+          });
+        }
+
+        console.log(`[DEBUG] find-app-script-usage: Built ${conditions.length} search conditions`);
+
+        const query = `
+          SELECT 
+            b.id as blueprintId,
+            json(b.data) as blueprintData,
+            json_group_array(
+              json_object(
+                'id', e.id,
+                'data', json(e.data)
+              )
+            ) as entities
+          FROM blueprints b
+          LEFT JOIN entities e ON json_extract(e.data, '$.blueprint') = b.id
+          ${conditions.length ? 'WHERE ' + conditions.join(' AND ') : ''}
+          GROUP BY b.id
+        `;
+
+        console.log(`[DEBUG] find-app-script-usage: Executing query`);
+        const results = db.prepare(query).all(...params);
+        console.log(`[DEBUG] find-app-script-usage: Found ${results.length} initial results`);
+
+        const processedResults = await Promise.all(results.map(async (result) => {
+          try {
+            const blueprintData = typeof result.blueprintData === 'string' 
+              ? JSON.parse(result.blueprintData)
+              : result.blueprintData;
+
+            const scriptUrl = blueprintData.script;
+            if (!scriptUrl) {
+              console.log(`[DEBUG] find-app-script-usage: No script URL for blueprint ${blueprintData.id}`);
+              return null;
+            }
+
+            const filename = scriptUrl.replace('asset://', '');
+            const scriptPath = path.join(assetsDir, filename);
+            console.log(`[DEBUG] find-app-script-usage: Checking script at ${scriptPath}`);
+
+            if (!await fs.exists(scriptPath)) {
+              console.log(`[DEBUG] find-app-script-usage: Script file not found for ${blueprintData.id}`);
+              return null;
+            }
+
+            const script = await fs.readFile(scriptPath, 'utf8');
+            
+            // Filter by script content if requested
+            if (scriptContent && !script.includes(scriptContent)) {
+              console.log(`[DEBUG] find-app-script-usage: Script content filter did not match for ${blueprintData.id}`);
+              return null;
+            }
+
+            return {
+              app: blueprintData,
+              script,
+              entities: parseEntities(result.entities)
+            };
+          } catch (err) {
+            console.error(`[ERROR] find-app-script-usage: Error processing result:`, err);
+            return null;
+          }
+        }));
+
+        const filteredResults = processedResults.filter(r => r !== null);
+        console.log(`[DEBUG] find-app-script-usage: Returning ${filteredResults.length} processed results`);
+        return formatResponse(filteredResults);
+      } catch (err) {
+        console.error(`[ERROR] find-app-script-usage: Failed with error:`, err);
+        return formatResponse(null, err);
+      } finally {
+        if (db) {
+          console.log(`[DEBUG] find-app-script-usage: Closing database connection`);
+          db.close();
+        }
+      }
+    }
+  )
+
+  // Register the search-docs tool
+  mcpServer.tool(
+    'search-docs',
+    {
+      query: z.string().describe('Search term to find in documentation files'),
+      limit: z.number().optional().default(5).describe('Maximum number of results to return')
+    },
+    async ({ query, limit = 5 }) => {
+      console.log(`[DEBUG] search-docs: Starting search with query="${query}", limit=${limit}`);
+      try {
+        const results = await searchDocs(query)
+        console.log(`[DEBUG] search-docs: Found ${results.length} total matches`);
+        
+        // Limit the number of results
+        const limitedResults = results.slice(0, limit)
+        console.log(`[DEBUG] search-docs: Returning ${limitedResults.length} results after limit`);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                data: {
+                  query,
+                  resultsCount: results.length,
+                  results: limitedResults.map(r => ({
+                    file: r.file,
+                    matchCount: r.matchCount,
+                    content: r.content
+                  }))
+                }
+              }, null, 2)
+            },
+          ],
+        }
+      } catch (err) {
+        console.error(`[ERROR] search-docs: Failed with error:`, err);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${err.message}`,
+            },
+          ],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // Register the create-entity tool
+  mcpServer.tool(
+    'create-entity',
+    {
+      blueprintId: z.string().describe('ID of the app to create an entity from'),
+      position: z.array(z.number()).length(3).optional().describe('Position [x, y, z]'),
+      quaternion: z.array(z.number()).length(4).optional().describe('Rotation as quaternion [x, y, z, w]'),
+      creatorId: z.string().optional().describe('ID of the player creating the entity')
+    },
+    async ({ blueprintId, position, quaternion, creatorId }) => {
+      console.log(`[DEBUG] create-entity: Starting creation for blueprint=${blueprintId}`);
+      try {
+        // Use default position/rotation if not provided
+        const pos = position || [0, 0, 0]
+        const rot = quaternion || [0, 0, 0, 1]
+        console.log(`[DEBUG] create-entity: Using position=${pos}, rotation=${rot}`);
+        
+        // Create the entity
+        console.log(`[DEBUG] create-entity: Creating entity with creatorId=${creatorId}`);
+        const entity = await createEntity(world, blueprintId, pos, rot, creatorId)
+        console.log(`[DEBUG] create-entity: Entity created successfully with id=${entity.data.id}`);
+        
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                data: {
+                  entity: entity.data
+                }
+              }, null, 2)
+            },
+          ],
+        }
+      } catch (err) {
+        console.error(`[ERROR] create-entity: Failed with error:`, err);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: ${err.message}`,
+            },
+          ],
+          isError: true,
+        }
+      }
+    }
+  )
+
+  // Return the server instance instead of registering it directly
+  return mcpServer;
+}
+
+// Helper function to parse entities JSON array
+function parseEntities(entitiesJson) {
+  try {
+    // If it's already an object/array, return it
+    if (typeof entitiesJson === 'object') {
+      return entitiesJson;
+    }
+    // Parse JSON string if needed
+    return JSON.parse(entitiesJson || '[]');
+  } catch (err) {
+    console.error('Error parsing entities:', err);
+    return [];
   }
 }

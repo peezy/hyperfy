@@ -21,13 +21,12 @@ import { Storage } from './Storage'
 
 // Import MCP dependencies
 import { fileURLToPath } from 'url'
-import { registerMCPServer } from './tools/registerMCPServer.js'
-import { McpClient } from './tools/mcp-client.js'
+import { AIClient } from './ai-client.js'
 import { readJWT } from '../core/utils-server'
 import { fastifyMCPSSE } from './tools/mcp-sse-plugin.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
-const mcpClient = new McpClient()
+const mcpClient = new AIClient()
 
 // Get current file's directory (ESM equivalent of __dirname)
 const __filename = fileURLToPath(import.meta.url)
@@ -57,8 +56,6 @@ const mcpServer = new McpServer({
   version: '0.0.1',
 })
 
-registerMCPServer(world, mcpServer)
-
 // Initialize world with all dependencies including MCP
 world.init({ db, storage, loadPhysX, mcp: mcpServer })
 
@@ -79,13 +76,6 @@ fastify.register(fastifyMCPSSE, {
   authHandler,
   sseEndpoint: '/sse',
   messagesEndpoint: '/messages'
-})
-
-// Register a separate SSE endpoint for apps (for backward compatibility)
-fastify.register(fastifyMCPSSE, {
-  server: mcpServer,
-  sseEndpoint: '/apps/sse',
-  messagesEndpoint: '/apps/messages'
 })
 
 // Add SSE endpoint for streaming AI responses

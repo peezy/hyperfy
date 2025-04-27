@@ -9,7 +9,7 @@ if (!ANTHROPIC_API_KEY) {
   throw new Error('ANTHROPIC_API_KEY is not set')
 }
 
-export class McpClient extends EventEmitter {
+export class AIClient extends EventEmitter {
   mcp
   anthropic
   transport
