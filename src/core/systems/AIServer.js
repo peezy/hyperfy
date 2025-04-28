@@ -7,6 +7,8 @@ import path from 'path'
 import { z } from 'zod'
 import { hashFile } from '../utils-server'
 import { uuid } from '../utils'
+import { AnthropicProvider } from '../../server/providers/AnthropicProvider.js'
+import { OpenAIProvider } from '../../server/providers/OpenAIProvider.js'
 
 export class AIServer extends System {
   constructor(world) {
@@ -23,6 +25,22 @@ export class AIServer extends System {
         console.log('[MCP] Using provided MCP server')
         this.mcp = mcp
         this.llmClient = llmClient
+
+        // Initialize and register both providers if llmClient is present
+        if (this.llmClient && this.llmClient.registerProvider) {
+          const anthropicProvider = new AnthropicProvider({
+            apiKey: process.env.ANTHROPIC_API_KEY,
+            // Optionally: model, max_tokens, systemPrompt
+          });
+          const openaiProvider = new OpenAIProvider({
+            apiKey: process.env.OPENAI_API_KEY,
+            // Optionally: model, max_tokens, systemPrompt
+          });
+          this.llmClient.registerProvider('anthropic', anthropicProvider);
+          this.llmClient.registerProvider('openai', openaiProvider);
+          this.llmClient.selectProvider('openai');
+          console.log('[AIServer] Registered Anthropic and OpenAI providers with AIClient');
+        }
       } else {
         console.log('[MCP] No MCP server provided')
       }

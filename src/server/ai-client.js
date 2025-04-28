@@ -1,45 +1,38 @@
 import { EventEmitter } from 'events'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
-import { AnthropicProvider } from './providers/AnthropicProvider.js'
 
 export class AIClient extends EventEmitter {
   mcp;
-  llmProviders = {};
-  selectedProvider = 'anthropic';
+  providers = {};
+  selectedProvider;
   transport;
   tools;
   resources;
 
-  constructor({ llmProvider, llmProviders } = {}) {
+  constructor() {
     super();
     console.log('Initializing MCPClient...');
-    // Support multiple providers
-    if (llmProviders) {
-      this.llmProviders = { ...llmProviders };
-      this.selectedProvider = Object.keys(llmProviders)[0] || 'anthropic';
-    } else {
-      // Fallback to single provider as 'anthropic'
-      const provider = llmProvider || new AnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY });
-      this.llmProviders = { anthropic: provider };
-      this.selectedProvider = 'anthropic';
-    }
+    // Only use provided providers, do not instantiate any here
     this.mcp = new Client({ name: 'mcp-client-cli', version: '1.0.0' });
     console.log('MCP client initialized');
     this.resources = [];
   }
 
   registerProvider(key, provider) {
-    this.llmProviders[key] = provider;
+    this.providers[key] = provider;
+    if (!this.selectedProvider) {
+      this.selectedProvider = key;
+    }
   }
 
   selectProvider(key) {
-    if (!this.llmProviders[key]) throw new Error(`Provider '${key}' not found`);
+    if (!this.providers[key]) throw new Error(`Provider '${key}' not found`);
     this.selectedProvider = key;
   }
 
   getCurrentProvider() {
-    return this.llmProviders[this.selectedProvider];
+    return this.providers[this.selectedProvider];
   }
 
   async connectToServer(serverUrl) {
@@ -183,7 +176,7 @@ export class AIClient extends EventEmitter {
     this.emit('start', { query, userId })
     
     // Use selected provider or override
-    const provider = providerKey ? this.llmProviders[providerKey] : this.getCurrentProvider();
+    const provider = providerKey ? this.providers[providerKey] : this.getCurrentProvider();
     if (!provider) throw new Error('No LLM provider available');
     
     // Try to get scripting rules and prepare system prompt
