@@ -72,7 +72,7 @@ export class AIServer extends System {
       console.error('[MCP] Failed to initialize server:', err)
     }
 
-    // Inject the registerMCPTool method into the app runtime
+    // Inject the registerMCPTool method and prompt function into the app runtime
     this.world.inject({
       app: {
         registerMCPTool: (entity, toolName, schema, handler) => {
@@ -88,6 +88,21 @@ export class AIServer extends System {
             }
           }
         },
+        prompt: async (entity, { query, userId }) => {
+          // Check scripting rules (optional, can be expanded)
+          if (!query) throw new Error('Missing query for prompt')
+          if (!this.llmClient) throw new Error('No LLM client available')
+          // Optionally, fetch scripting rules here if needed
+          // Use the current provider
+          const providerKey = this.world.settings.llmProvider || 'openai';
+          try {
+            this.llmClient.selectProvider(providerKey);
+          } catch (e) {
+            throw new Error(`Unknown LLM provider: ${providerKey}`)
+          }
+          // Start a fresh prompt loop and return the full result
+          return await this.llmClient.processQueryStream(query, userId, providerKey, entity.data.id)
+        }
       },
     })
 

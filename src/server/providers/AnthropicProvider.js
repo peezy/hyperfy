@@ -39,11 +39,11 @@ export class AnthropicProvider extends LLMProvider {
 
   /**
    * Handle the full prompt + tool usage loop for Anthropic.
-   * @param {Object} params - { query, userId, tools, systemPrompt, mcp, emit, getScriptingRules }
+   * @param {Object} params - { query, userId, entityId, tools, systemPrompt, mcp, emit, getScriptingRules }
    * @returns {Promise<string>} The final response text.
    */
-  async handlePromptLoop({ query, userId, tools, systemPrompt, mcp, emit, getScriptingRules }) {
-    emit('start', { query, userId });
+  async handlePromptLoop({ query, userId, entityId, tools, systemPrompt, mcp, emit, getScriptingRules }) {
+    emit('start', { query, userId, entityId });
     const messages = [
       {
         role: 'user',
@@ -51,15 +51,16 @@ export class AnthropicProvider extends LLMProvider {
       },
     ];
     if (userId) {
-      emit('status', { status: `Processing request for user ${userId.substring(0, 8)}...`, userId });
+      emit('status', { status: `Processing request for user ${userId.substring(0, 8)}...`, userId, entityId });
     } else {
-      emit('status', { status: 'Thinking...', userId });
+      emit('status', { status: 'Thinking...', userId, entityId });
     }
     // Initial LLM call
     const initialResponse = await this.sendMessage({
       messages,
       tools,
       userId,
+      entityId,
       query,
       systemPrompt,
     });
@@ -99,6 +100,7 @@ export class AnthropicProvider extends LLMProvider {
               messages,
               tools,
               userId,
+              entityId,
               query,
               systemPrompt,
             });

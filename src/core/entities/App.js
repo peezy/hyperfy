@@ -175,8 +175,8 @@ export class App extends Entity {
     // clear fields
     this.onFields?.([])
     // unregister any MCP tools
-    if (this.world.mcp) {
-      this.world.mcp.unregisterAppMCPTools(this.data.id)
+    if (this.world.ai) {
+      this.world.ai.unregisterAppMCPTools?.(this.data.id)
     }
   }
 

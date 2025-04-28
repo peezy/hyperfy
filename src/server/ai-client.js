@@ -144,13 +144,14 @@ export class AIClient extends EventEmitter {
     }
   }
 
-  async processQueryStream(query, userId = null, providerKey = null) {
+  async processQueryStream(query, userId = null, providerKey = null, entityId = null) {
     /**
      * Process a query using Claude and available tools with streaming updates
      *
      * @param query - The user's input query
      * @param userId - Optional user ID for context and permission checking
      * @param providerKey - Optional provider key to override the selected provider
+     * @param entityId - Optional entity ID for context and permission checking
      * @returns Processed response as a string
      */
     console.log(`Processing query: "${query}" for user: ${userId || 'anonymous'}`)
@@ -195,6 +196,7 @@ export class AIClient extends EventEmitter {
     return provider.handlePromptLoop({
       query,
       userId,
+      entityId,
       tools: this.tools,
       systemPrompt,
       mcp: this.mcp,
@@ -203,8 +205,8 @@ export class AIClient extends EventEmitter {
     });
   }
 
-  async processQuery(query) {
-    return this.processQueryStream(query)
+  async processQuery(query, userId = null, providerKey = null, entityId = null) {
+    return this.processQueryStream(query, userId, providerKey, entityId)
   }
 
   async cleanup() {

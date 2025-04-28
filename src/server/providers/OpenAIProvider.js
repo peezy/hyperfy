@@ -61,17 +61,17 @@ export class OpenAIProvider extends LLMProvider {
     return response.choices[0].message;
   }
 
-  async handlePromptLoop({ query, userId, tools, systemPrompt, mcp, emit, getScriptingRules }) {
-    emit('start', { query, userId });
+  async handlePromptLoop({ query, userId, entityId, tools, systemPrompt, mcp, emit, getScriptingRules }) {
+    emit('start', { query, userId, entityId });
     const messages = [];
     if (systemPrompt || this.systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt || this.systemPrompt });
     }
     messages.push({ role: 'user', content: query });
     if (userId) {
-      emit('status', { status: `Processing request for user ${userId.substring(0, 8)}...`, userId });
+      emit('status', { status: `Processing request for user ${userId.substring(0, 8)}...`, userId, entityId });
     } else {
-      emit('status', { status: 'Thinking...', userId });
+      emit('status', { status: 'Thinking...', userId, entityId });
     }
     const openaiTools = this.convertTools(tools);
     let response = await this.openai.chat.completions.create({
@@ -79,6 +79,8 @@ export class OpenAIProvider extends LLMProvider {
       max_tokens: this.max_tokens,
       messages,
       tools: openaiTools,
+      userId,
+      entityId,
     });
     response = response.choices[0].message;
     const finalText = [];
