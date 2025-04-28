@@ -60,8 +60,14 @@ function AIButton({ world }) {
   const [toolLogs, setToolLogs] = useState([])
   const [animation, setAnimation] = useState(false)
   const inputRef = useRef(null)
-  const eventSourceRef = useRef(null)
   const responseAreaRef = useRef(null)
+  const toolLogsRef = useRef([]) // For debugging without causing render loops
+
+  // Update ref whenever toolLogs changes
+  useEffect(() => {
+    toolLogsRef.current = toolLogs;
+    console.log('[AIButton] toolLogs updated:', toolLogs);
+  }, [toolLogs]);
 
   // Set animation to true after mount to trigger entrance animation
   useEffect(() => {
@@ -122,221 +128,255 @@ function AIButton({ world }) {
     }
   }, [responseSegments, toolLogs])
 
-  // Clean up event source on unmount
+  // Set up event listeners for LLM events when component mounts
   useEffect(() => {
+    const handleLLMEvent = (event) => {
+      console.log('[AIButton] Received LLM event:', event);
+      
+      // Make sure event is properly formatted
+      if (!event || !event.type) {
+        console.error('[AIButton] Received malformed event:', event);
+        return;
+      }
+      
+      const { type, data } = event;
+      console.log(`[AIButton] Processing event type: ${type} with data:`, data);
+      
+      switch (type) {
+        case 'start':
+          setIsLoading(true)
+          setStatus('Loading...')
+          setResponseSegments([])
+          setResponse('')
+          setToolLogs([])
+          setStreamOpen(true)
+          setShowResponse(true)
+          setShowPrompt(false)
+          break
+          
+        case 'status':
+          setStatus(data.status)
+          break
+          
+        case 'text':
+          // Debug log for text events
+          console.log('[AIButton] Text event with content:', data.text);
+          
+          // Append text to the last segment if it's a text segment
+          setResponseSegments(prev => {
+            const newSegments = [...prev];
+            if (newSegments.length > 0 && newSegments[newSegments.length - 1]?.type === 'text') {
+              newSegments[newSegments.length - 1].content += data.text;
+            } else {
+              newSegments.push({ type: 'text', content: data.text });
+            }
+            return newSegments;
+          });
+          
+          // Also update the full response for history saving
+          setResponse(prev => prev + data.text)
+          break
+          
+        case 'tool_start':
+          // Debug log for tool start events
+          console.log('[AIButton] Tool start event for tool:', data.tool, 'with args:', data.args);
+          
+          setStatus(`Using tool: ${data.tool}...`)
+          
+          // Create a new tool log with a unique ID
+          const toolId = `tool-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          const newToolLog = {
+            id: toolId,
+            tool: data.tool,
+            type: 'start',
+            args: data.args || {},
+            expanded: true, // Start expanded for better visibility
+            timestamp: new Date().toISOString()
+          }
+          
+          console.log('[AIButton] Created new tool log:', newToolLog);
+          
+          setToolLogs(prev => {
+            const updated = [...prev, newToolLog];
+            console.log('[AIButton] Updated tool logs:', updated);
+            return updated;
+          })
+          
+          // Insert the tool log in the response segments
+          setResponseSegments(prev => {
+            const updated = [...prev, { type: 'tool', id: toolId }];
+            console.log('[AIButton] Updated response segments with tool reference:', updated);
+            return updated;
+          });
+          break
+          
+        case 'tool_result':
+          // Debug log for tool result events
+          console.log('[AIButton] Tool result event for tool:', data.tool, 'with result:', data.result);
+          
+          // Add result to existing tool log
+          setToolLogs(prev => {
+            console.log('[AIButton] Current tool logs before update:', prev);
+            
+            // Find matching tool logs
+            const matchingLogs = prev.filter(log => 
+              log.tool === data.tool && log.type === 'start' && !log.result
+            );
+            console.log('[AIButton] Matching logs for update:', matchingLogs);
+            
+            const updated = prev.map(log => {
+              if (log.tool === data.tool && log.type === 'start' && !log.result) {
+                return { ...log, result: data.result, type: 'complete' };
+              }
+              return log;
+            });
+            
+            console.log('[AIButton] Updated tool logs after result:', updated);
+            return updated;
+          })
+          
+          setStatus(`Tool ${data.tool} completed`)
+          break
+          
+        case 'tool_error':
+          // Debug log for tool error events
+          console.log('[AIButton] Tool error event for tool:', data.tool, 'with error:', data.error);
+          
+          setStatus(`Error using tool: ${data.tool}`)
+          
+          // Add error to existing tool log
+          setToolLogs(prev => {
+            console.log('[AIButton] Current tool logs before error update:', prev);
+            
+            const updated = prev.map(log => {
+              if (log.tool === data.tool && log.type === 'start') {
+                return { ...log, error: data.error, type: 'error' };
+              }
+              return log;
+            });
+            
+            console.log('[AIButton] Updated tool logs after error:', updated);
+            return updated;
+          })
+          
+          // Add error indication in the response
+          setResponseSegments(prev => {
+            const newSegments = [...prev];
+            newSegments.push({
+              type: 'text',
+              content: `\n❌ Error using tool ${data.tool}: ${data.error}`
+            });
+            return newSegments;
+          });
+          
+          // Update full response text
+          setResponse(prev => prev + `\n❌ Error using tool ${data.tool}: ${data.error}`)
+          break
+          
+        case 'complete':
+          setStatus('Done')
+          setIsLoading(false)
+          setStreamOpen(false)
+          
+          // Save this conversation to history after completion
+          const responseText = data.response || response;
+          
+          // Get existing history or initialize an empty array
+          const history = storage.get('ai-conversation-history', []);
+          
+          // Create a new conversation entry with tool logs and segments
+          const conversation = {
+            query: input.trim(),
+            response: responseText,
+            responseSegments: responseSegments,
+            toolLogs: toolLogs,
+            timestamp: new Date().toISOString()
+          };
+          
+          // Add to the beginning of the history and limit to 50 entries
+          const updatedHistory = [conversation, ...history].slice(0, 50);
+          storage.set('ai-conversation-history', updatedHistory);
+          break
+          
+        case 'error':
+          try {
+            setStatus(`Error: ${data.error || 'An unknown error occurred'}`)
+            if (data.error?.includes('auth') || data.error?.includes('permission')) {
+              setAuthError('You may not have permission to use this feature.')
+            }
+          } catch (err) {
+            setStatus('An error occurred')
+          }
+          setIsLoading(false)
+          setStreamOpen(false)
+          break
+          
+        default:
+          console.warn(`[AIButton] Unknown event type: ${type}`)
+      }
+    }
+    
+    // Listen to world events instead of network events
+    world.on('llmEvent', handleLLMEvent)
+    
+    // Remove event listener on cleanup
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close()
-      }
+      world.off('llmEvent', handleLLMEvent)
     }
-  }, [])
+  }, [world, input, response, responseSegments, toolLogs])
 
-  const handleStreamResponse = async (query) => {
-    // Get auth token from localStorage
-    const authToken = storage.get('authToken')
-    
-    if (!authToken) {
-      setAuthError('Not authenticated. Please refresh the page or log in again.')
-      setStatus('Authentication error')
-      setIsLoading(false)
-      return
-    }
-    
-    // Clear previous response and set loading state
-    setResponse('')
-    setResponseSegments([{ type: 'text', content: '' }])
-    setStatus('Connecting...')
-    setIsLoading(true)
-    setShowResponse(true)
-    setShowPrompt(false)
-    setAuthError(null)
-    setToolLogs([])
-    
-    // Store the original query for later use with conversation history
-    const originalQuery = query;
-    
-    // Close any existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-    }
-
-    // Create a new SSE connection with auth token
-    const encodedQuery = encodeURIComponent(query)
-    const eventSource = new EventSource(`/mcp/stream?query=${encodedQuery}&authToken=${authToken}`)
-    eventSourceRef.current = eventSource
-    setStreamOpen(true)
-
-    // Handle connection open
-    eventSource.onopen = () => {
-      console.log('SSE connection opened')
-    }
-
-    // Handle connection errors
-    eventSource.onerror = (error) => {
-      console.error('SSE connection error:', error)
-      setStatus('Connection error. Please try again.')
-      setIsLoading(false)
-      eventSource.close()
-      setStreamOpen(false)
-      
-      // Check if this might be an auth error (no specific error info from SSE)
-      if (!response) {
-        setAuthError('Connection failed. You may not have permission to use this feature.')
-      }
-    }
-
-    // Handle various event types
-    eventSource.addEventListener('start', (event) => {
-      const data = JSON.parse(event.data)
-      console.log('Started processing query:', data)
-    })
-
-    eventSource.addEventListener('status', (event) => {
-      const data = JSON.parse(event.data)
-      setStatus(data.status)
-    })
-
-    eventSource.addEventListener('text', (event) => {
-      const data = JSON.parse(event.data)
-      // Append text to the last segment if it's a text segment
-      setResponseSegments(prev => {
-        const newSegments = [...prev];
-        if (newSegments.length > 0 && newSegments[newSegments.length - 1].type === 'text') {
-          newSegments[newSegments.length - 1].content += data.text;
-        } else {
-          newSegments.push({ type: 'text', content: data.text });
-        }
-        return newSegments;
-      });
-      
-      // Also update the full response for history saving
-      setResponse(prev => prev + data.text)
-    })
-
-    eventSource.addEventListener('tool_start', (event) => {
-      const data = JSON.parse(event.data)
-      setStatus(`Using tool: ${data.tool}...`)
-      
-      // Create a new tool log
-      const newToolLog = {
-        id: `tool-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        tool: data.tool,
-        type: 'start',
-        args: data.args,
-        expanded: false,
-        timestamp: new Date().toISOString()
-      }
-      
-      setToolLogs(prev => [...prev, newToolLog])
-      
-      // Insert the tool log in the response segments
-      setResponseSegments(prev => {
-        return [...prev, { type: 'tool', id: newToolLog.id }];
-      });
-    })
-
-    eventSource.addEventListener('tool_result', (event) => {
-      const data = JSON.parse(event.data)
-      console.log('Tool result:', data)
-      
-      // Add result to existing tool log
-      setToolLogs(prev => prev.map(log => {
-        if (log.tool === data.tool && log.type === 'start' && !log.result) {
-          return { ...log, result: data.result, type: 'complete' }
-        }
-        return log
-      }))
-      
-      setStatus(`Tool ${data.tool} completed`)
-    })
-
-    eventSource.addEventListener('tool_error', (event) => {
-      const data = JSON.parse(event.data)
-      setStatus(`Error using tool: ${data.tool}`)
-      
-      // Add error to existing tool log
-      setToolLogs(prev => prev.map(log => {
-        if (log.tool === data.tool && log.type === 'start') {
-          return { ...log, error: data.error, type: 'error' }
-        }
-        return log
-      }))
-      
-      // Add error indication in the response
-      setResponseSegments(prev => {
-        const newSegments = [...prev];
-        newSegments.push({
-          type: 'text',
-          content: `\n❌ Error using tool ${data.tool}: ${data.error}`
-        });
-        return newSegments;
-      });
-      
-      // Update full response text
-      setResponse(prev => prev + `\n❌ Error using tool ${data.tool}: ${data.error}`)
-    })
-
-    eventSource.addEventListener('complete', (event) => {
-      const data = JSON.parse(event.data)
-      setStatus('Done')
-      setIsLoading(false)
-      eventSource.close()
-      setStreamOpen(false)
-      
-      // Save this conversation to history after completion
-      const responseText = data.response || response;
-      
-      // Get existing history or initialize an empty array
-      const history = storage.get('ai-conversation-history', []);
-      
-      // Create a new conversation entry with tool logs and segments
-      const conversation = {
-        query: originalQuery,
-        response: responseText,
-        responseSegments: responseSegments,
-        toolLogs: toolLogs,
-        timestamp: new Date().toISOString()
-      };
-      
-      // Add to the beginning of the history and limit to 50 entries
-      const updatedHistory = [conversation, ...history].slice(0, 50);
-      storage.set('ai-conversation-history', updatedHistory);
-    })
-
-    eventSource.addEventListener('error', (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        setStatus(`Error: ${data.error}`)
-      } catch (err) {
-        setStatus('An error occurred')
-      }
-      setIsLoading(false)
-      eventSource.close()
-      setStreamOpen(false)
-    })
-  }
-
-  const handleSubmit = async e => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!input.trim()) return
-
+    const query = input.trim()
+    if (!query) return
+    
     try {
-      await handleStreamResponse(input.trim())
+      // Clear previous state
+      setResponse('')
+      setResponseSegments([])
+      setStatus('Starting...')
+      setIsLoading(true)
+      setShowResponse(true)
+      setShowPrompt(false)
+      setAuthError(null)
+      setToolLogs([])
+      setStreamOpen(true)
+      
+      // Use world.ai to process the query
+      if (!world.ai) {
+        throw new Error('AI system is not available')
+      }
+      
+      // Send the query to the AI system using the proper packet name
+      world.network.send('aiProcessQuery', { query })
+      
+      // if (!startSuccess) {
+      //   throw new Error('Failed to start AI processing')
+      // }
+      
       // Clear input after submission
       setInput('')
     } catch (error) {
-      console.error('Error sending prompt to API:', error)
+      console.error('Error sending prompt to AI system:', error)
       setStatus(`Error: ${error.message}`)
       setIsLoading(false)
+      setStreamOpen(false)
+      
+      if (error.message.includes('auth') || error.message.includes('permission')) {
+        setAuthError('You may not have permission to use this feature.')
+      }
     }
   }
 
   const closeResponse = () => {
     setShowResponse(false)
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
+    
+    // Cancel the stream if it's still active
+    if (streamOpen) {
+      world.network.send('aiCancelStream')
+      setStreamOpen(false)
     }
-    setStreamOpen(false)
+    
     setIsLoading(false)
     setResponse('')
     setResponseSegments([])
@@ -346,9 +386,16 @@ function AIButton({ world }) {
   }
 
   const toggleToolExpanded = (toolId) => {
-    setToolLogs(prev => prev.map(log => 
-      log.id === toolId ? { ...log, expanded: !log.expanded } : log
-    ))
+    console.log(`[AIButton] Toggling tool expansion for ID: ${toolId}`);
+    console.log(`[AIButton] Current tool logs:`, toolLogs);
+    
+    setToolLogs(prev => {
+      const updated = prev.map(log => 
+        log.id === toolId ? { ...log, expanded: !log.expanded } : log
+      );
+      console.log(`[AIButton] Updated tool logs after toggle:`, updated);
+      return updated;
+    });
   }
 
   const renderToolDetails = (tool) => {
@@ -379,8 +426,17 @@ function AIButton({ world }) {
   }
 
   const renderToolLog = (toolId) => {
+    console.log(`[AIButton] Rendering tool log for ID: ${toolId}`);
+    console.log(`[AIButton] Available tool logs:`, toolLogs);
+    
     const tool = toolLogs.find(t => t.id === toolId);
-    if (!tool) return null;
+    
+    if (!tool) {
+      console.warn(`[AIButton] No tool found with ID: ${toolId}`);
+      return null;
+    }
+    
+    console.log(`[AIButton] Found tool:`, tool);
     
     return (
       <div className="tool-log">
@@ -402,10 +458,15 @@ function AIButton({ world }) {
   }
 
   const renderResponseContent = () => {
+    console.log(`[AIButton] Rendering response content with segments:`, responseSegments);
+    
     return responseSegments.map((segment, index) => {
+      console.log(`[AIButton] Rendering segment ${index} of type ${segment.type}:`, segment);
+      
       if (segment.type === 'text') {
         return <span key={index}>{segment.content}</span>;
       } else if (segment.type === 'tool') {
+        console.log(`[AIButton] Rendering tool segment with ID: ${segment.id}`);
         return <div key={index}>{renderToolLog(segment.id)}</div>;
       }
       return null;
@@ -692,9 +753,12 @@ function AIButton({ world }) {
               border: 1px solid ${styleConfig.colors.border};
               
               .tool-log {
-                margin: 0.5rem 0;
+                margin: 0.75rem 0;
                 border-radius: 0.25rem;
                 overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: ${styleConfig.colors.toolUseBg};
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
               }
               
               .tool-header {
@@ -704,6 +768,7 @@ function AIButton({ world }) {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
+                font-weight: bold;
                 
                 &:hover {
                   background: ${styleConfig.colors.toolUseExpandedBg};
@@ -712,10 +777,13 @@ function AIButton({ world }) {
               
               .tool-name {
                 font-weight: bold;
+                display: flex;
+                align-items: center;
               }
               
               .tool-expand-icon {
                 transition: transform 0.2s;
+                margin-left: 0.5rem;
                 
                 &.expanded {
                   transform: rotate(180deg);
@@ -723,7 +791,7 @@ function AIButton({ world }) {
               }
               
               .tool-details {
-                padding: 0.5rem;
+                padding: 0.75rem;
                 background: ${styleConfig.colors.toolUseExpandedBg};
                 border-top: 1px solid rgba(255, 255, 255, 0.1);
               }
@@ -735,11 +803,14 @@ function AIButton({ world }) {
               }
               
               .tool-args, .tool-result {
-                margin-bottom: 0.5rem;
+                margin-bottom: 0.75rem;
               }
               
               .tool-error {
                 color: #ff6666;
+                padding: 0.25rem;
+                border-radius: 0.25rem;
+                background: rgba(255, 0, 0, 0.1);
               }
               
               pre {
@@ -748,6 +819,9 @@ function AIButton({ world }) {
                 font-size: 0.85rem;
                 max-height: 200px;
                 overflow-y: auto;
+                background: rgba(0, 0, 0, 0.2);
+                padding: 0.5rem;
+                border-radius: 0.25rem;
               }
             `}
           >

@@ -5,22 +5,24 @@ import fs from 'fs-extra'
 import path from 'path'
 
 import { z } from 'zod'
-import { hashFile } from '../../core/utils-server'
-import { uuid } from '../../core/utils'
+import { hashFile } from '../utils-server'
+import { uuid } from '../utils'
 
-export class MCP extends System {
+export class AIServer extends System {
   constructor(world) {
     super(world)
     this.mcp = null
     this.appTools = new Map()
+    this.activeStreams = new Map() // Track active streams by player ID
   }
 
-  async init({ mcp }) {
+  async init({ mcp, llmClient }) {
     try {
       // Use the mcp server instance if provided
       if (mcp) {
         console.log('[MCP] Using provided MCP server')
         this.mcp = mcp
+        this.llmClient = llmClient
       } else {
         console.log('[MCP] No MCP server provided')
       }
@@ -31,6 +33,10 @@ export class MCP extends System {
         registerBuilderTools(this.world, this.mcp)
 
         console.log('[MCP] Server initialized successfully')
+
+        if (this.llmClient) {
+          this.llmClient.connectToServer(`http://localhost:${process.env.PORT}/sse`)
+        }
       }
     } catch (err) {
       console.error('[MCP] Failed to initialize server:', err)
@@ -54,6 +60,295 @@ export class MCP extends System {
         },
       },
     })
+
+    this.world.network.onAiProcessQuery = this.onAiProcessQuery.bind(this)
+    this.world.network.onAiCancelStream = this.onAiCancelStream.bind(this)
+  }
+
+  /**
+   * Handle a query processing request from the client
+   * @param {Object} data - The query data
+   * @returns {Object} - Success status
+   */
+  async onAiProcessQuery(socket, data) {
+    try {
+      if (!data.query) {
+        console.error('[AIServer] Missing query in request:', data)
+        return { success: false, error: 'Missing query parameter' }
+      }
+
+      // Get the player entity from socket
+      const player = socket.player
+      if (!player) {
+        console.error(`[AIServer] No player found for socket`)
+        return { success: false, error: 'Player not found' }
+      }
+      
+      // Check if player has permission
+      if (!this.world.network.isAdmin(player) && !this.world.settings.public) {
+        console.error(`[AIServer] Player ${player.data.id} not authorized`)
+        
+        // Send error event directly to this player
+        this.world.network.sendTo(socket.id, 'llmEvent', {
+          type: 'error',
+          data: {
+            error: 'Unauthorized: You do not have permission to use AI features',
+            userId: player.data.id
+          }
+        })
+        
+        return { success: false, error: 'Unauthorized' }
+      }
+      
+      console.log(`[AIServer] Processing query for player ${player.data.id}: ${data.query}`)
+      
+      // Start the LLM stream for this player
+      const success = await this.onLLMStreamStartRequest(player, data.query)
+      
+      return { success }
+    } catch (error) {
+      console.error('[AIServer] Error processing query:', error)
+      
+      // Send error event if we have a socket
+      if (socket) {
+        this.world.network.sendTo(socket.id, 'llmEvent', {
+          type: 'error',
+          data: {
+            error: error.message || 'Unknown error processing your request',
+            userId: socket.player?.data.id
+          }
+        })
+      }
+      
+      return { success: false, error: error.message || 'Unknown error' }
+    }
+  }
+  
+  /**
+   * Handle a stream cancellation request
+   * @param {Object} data - The cancellation data
+   * @returns {Object} - Success status
+   */
+  onAiCancelStream(socket, data) {
+    try {
+      const player = socket.player
+      if (!player) {
+        console.error('[AIServer] No player found for socket')
+        return { success: false, error: 'Player not found' }
+      }
+
+      const playerId = player.data.id
+      console.log(`[AIServer] Cancelling stream for player ${playerId}`)
+      
+      // Cancel the stream for this player
+      const success = this.cancelLLMStream(playerId)
+      
+      return { success }
+    } catch (error) {
+      console.error('[AIServer] Error cancelling stream:', error)
+      return { success: false, error: error.message || 'Unknown error' }
+    }
+  }
+  
+  /**
+   * Register network message handlers for AI functionality
+   */
+  registerNetworkHandlers() {
+    // These are now handled by the onAiProcessQuery and onAiCancelStream methods
+  }
+
+  /**
+   * Starts an LLM stream for a player with the given query
+   * @param {Object} player - The player entity requesting the stream
+   * @param {string} query - The query to process
+   * @returns {boolean} - True if stream started successfully
+   */
+  async onLLMStreamStartRequest(player, query) {
+    if (!player || !query) {
+      console.error('[LLM] Invalid player or query for stream request')
+      return false
+    }
+    
+    if (!this.llmClient) {
+      console.error('[LLM] No LLM client available')
+      this.world.network.sendTo(player.data.id, 'llmEvent', { 
+        type: 'error', 
+        data: { 
+          error: 'LLM service unavailable',
+          userId: player.data.id 
+        } 
+      })
+      return false
+    }
+    
+    const userId = player.data.id
+    console.log(`[LLM] Starting stream for player ${userId} with query: ${query}`)
+    
+    // Check if the player already has an active stream
+    if (this.activeStreams.has(userId)) {
+      console.log(`[LLM] Player ${userId} already has an active stream, ending previous one`)
+      
+      // Send completion event for the previous stream
+      this.world.network.sendTo(userId, 'llmEvent', {
+        type: 'complete',
+        data: {
+          userId,
+          message: 'Stream replaced by new request'
+        }
+      })
+    }
+    
+    // Track this stream as active
+    this.activeStreams.set(userId, {
+      startTime: Date.now(),
+      query
+    })
+    
+    // Set up event handlers for this player
+    const eventHandlers = {
+      onStart: (data) => {
+        if (data.userId === userId || !data.userId) {
+          this.onLLMChatEvent({ type: 'start', data }, player)
+        }
+      },
+      
+      onStatus: (data) => {
+        if (data.userId === userId || !data.userId) {
+          this.onLLMChatEvent({ type: 'status', data }, player)
+        }
+      },
+      
+      onText: (data) => {
+        if (data.userId === userId || !data.userId) {
+          this.onLLMChatEvent({ type: 'text', data }, player)
+        }
+      },
+      
+      onToolStart: (data) => {
+        if (data.userId === userId || !data.userId) {
+          this.onLLMChatEvent({ type: 'tool_start', data }, player)
+        }
+      },
+      
+      onToolResult: (data) => {
+        if (data.userId === userId || !data.userId) {
+          this.onLLMChatEvent({ type: 'tool_result', data }, player)
+        }
+      },
+      
+      onToolError: (data) => {
+        if (data.userId === userId || !data.userId) {
+          this.onLLMChatEvent({ type: 'tool_error', data }, player)
+        }
+      },
+      
+      onComplete: (data) => {
+        if (data.userId === userId || !data.userId) {
+          this.onLLMChatEvent({ type: 'complete', data }, player)
+          
+          // Remove this stream from active streams
+          this.activeStreams.delete(userId)
+          
+          // Remove all event listeners
+          this.removeEventListeners(this.llmClient, eventHandlers)
+        }
+      },
+      
+      onError: (data) => {
+        if (data.userId === userId || !data.userId) {
+          this.onLLMChatEvent({ type: 'error', data }, player)
+          
+          // Remove this stream from active streams
+          this.activeStreams.delete(userId)
+          
+          // Remove all event listeners
+          this.removeEventListeners(this.llmClient, eventHandlers)
+        }
+      }
+    }
+    
+    // Add all event listeners
+    this.llmClient.on('start', eventHandlers.onStart)
+    this.llmClient.on('status', eventHandlers.onStatus)
+    this.llmClient.on('text', eventHandlers.onText)
+    this.llmClient.on('tool_start', eventHandlers.onToolStart)
+    this.llmClient.on('tool_result', eventHandlers.onToolResult)
+    this.llmClient.on('tool_error', eventHandlers.onToolError)
+    this.llmClient.on('complete', eventHandlers.onComplete)
+    this.llmClient.on('error', eventHandlers.onError)
+    
+    try {
+      // Process the query
+      this.world.network.sendTo(userId, 'llmEvent', {
+        type: 'status',
+        data: { 
+          status: 'Starting LLM query processing...',
+          userId 
+        }
+      })
+      
+      // Start processing the query
+      await this.llmClient.processQueryStream(query, userId)
+      return true
+    } catch (error) {
+      console.error(`[LLM] Error processing query stream for ${userId}:`, error)
+      
+      // Send error to client
+      this.world.network.sendTo(userId, 'llmEvent', {
+        type: 'error',
+        data: { 
+          error: error.message || 'Error processing query',
+          userId 
+        }
+      })
+      
+      // Clean up
+      this.activeStreams.delete(userId)
+      this.removeEventListeners(this.llmClient, eventHandlers)
+      return false
+    }
+  }
+  
+  /**
+   * Helper method to remove all event listeners
+   * @param {Object} emitter - The event emitter
+   * @param {Object} handlers - Map of event handlers
+   */
+  removeEventListeners(emitter, handlers) {
+    emitter.removeListener('start', handlers.onStart)
+    emitter.removeListener('status', handlers.onStatus)
+    emitter.removeListener('text', handlers.onText)
+    emitter.removeListener('tool_start', handlers.onToolStart)
+    emitter.removeListener('tool_result', handlers.onToolResult)
+    emitter.removeListener('tool_error', handlers.onToolError)
+    emitter.removeListener('complete', handlers.onComplete)
+    emitter.removeListener('error', handlers.onError)
+  }
+  
+  /**
+   * Cancels an active LLM stream for a player
+   * @param {string} userId - ID of the player whose stream should be cancelled
+   * @returns {boolean} - True if a stream was cancelled
+   */
+  cancelLLMStream(userId) {
+    if (!this.activeStreams.has(userId)) {
+      return false
+    }
+    
+    console.log(`[LLM] Cancelling stream for player ${userId}`)
+    
+    // Send cancellation event
+    this.world.network.sendTo(userId, 'llmEvent', {
+      type: 'complete',
+      data: {
+        userId,
+        message: 'Stream cancelled by system'
+      }
+    })
+    
+    // Remove from active streams
+    this.activeStreams.delete(userId)
+    return true
   }
 
   registerAppMCPTool(toolName, schema, handler, entityId) {
@@ -173,10 +468,63 @@ export class MCP extends System {
   getmcp() {
     return this.mcp
   }
+
+  onLLMChatEvent(event, player) {
+    // Only process events if we have a valid player
+    if (!player) return
+
+    const { type, data } = event
+
+    // Add player ID to data
+    const eventData = {
+      ...data,
+      userId: player.data.id
+    }
+
+    console.log(`[AIServer] Sending LLM event type: ${type} to player: ${player.data.id}`, eventData);
+
+    switch (type) {
+      case 'start':
+        this.world.network.sendTo(player.data.id, 'llmEvent', { type: 'start', data: eventData })
+        break
+      case 'status':
+        this.world.network.sendTo(player.data.id, 'llmEvent', { type: 'status', data: eventData })
+        break
+      case 'text':
+        this.world.network.sendTo(player.data.id, 'llmEvent', { type: 'text', data: eventData })
+        break
+      case 'tool_start':
+        // Ensure tool args are properly formatted
+        if (eventData.args && typeof eventData.args === 'string') {
+          try {
+            eventData.args = JSON.parse(eventData.args);
+          } catch (e) {
+            console.warn(`[AIServer] Failed to parse tool args as JSON, keeping as string`);
+          }
+        }
+        
+        console.log(`[AIServer] Sending tool_start for ${eventData.tool} with args:`, eventData.args);
+        this.world.network.sendTo(player.data.id, 'llmEvent', { type: 'tool_start', data: eventData })
+        break
+      case 'tool_result':
+        console.log(`[AIServer] Sending tool_result for ${eventData.tool} with result:`, eventData.result);
+        this.world.network.sendTo(player.data.id, 'llmEvent', { type: 'tool_result', data: eventData })
+        break
+      case 'tool_error':
+        console.log(`[AIServer] Sending tool_error for ${eventData.tool} with error:`, eventData.error);
+        this.world.network.sendTo(player.data.id, 'llmEvent', { type: 'tool_error', data: eventData })
+        break
+      case 'complete':
+        this.world.network.sendTo(player.data.id, 'llmEvent', { type: 'complete', data: eventData })
+        break
+      case 'error':
+        this.world.network.sendTo(player.data.id, 'llmEvent', { type: 'error', data: eventData })
+        break
+      default:
+        console.warn(`[LLM] Unknown event type: ${type}`)
+    }
+  }
 }
-
-
-
 
 const rootDir = path.join(__dirname, '../')
 const worldDir = path.join(rootDir, process.env.WORLD)

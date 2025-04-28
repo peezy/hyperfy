@@ -26,7 +26,7 @@ import { readJWT } from '../core/utils-server'
 import { fastifyMCPSSE } from './mcp-fastify-plugin.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
-const mcpClient = new AIClient()
+const llmClient = new AIClient()
 
 // Get current file's directory (ESM equivalent of __dirname)
 const __filename = fileURLToPath(import.meta.url)
@@ -51,13 +51,13 @@ const world = createServerWorld()
 const fastify = Fastify({ logger: { level: 'error' } })
 
 // Create the MCP server instance
-const mcpServer = new McpServer({
+const mcp = new McpServer({
   name: 'hyperfy-mcp-server',
   version: '0.0.1',
 })
 
 // Initialize world with all dependencies including MCP
-world.init({ db, storage, loadPhysX, mcp: mcpServer })
+world.init({ db, storage, loadPhysX, mcp, llmClient })
 
 // Create an auth handler function to validate tokens and return player IDs
 const authHandler = async (authToken) => {
@@ -72,7 +72,7 @@ const authHandler = async (authToken) => {
 
 // Register MCP SSE endpoints
 fastify.register(fastifyMCPSSE, {
-  server: mcpServer,
+  server: mcp,
   authHandler,
   sseEndpoint: '/sse',
   messagesEndpoint: '/messages'
@@ -171,41 +171,41 @@ fastify.get('/mcp/stream', async (req, reply) => {
         reply.raw.end()
 
         // Clean up event listeners
-        mcpClient.removeListener('start', onStart)
-        mcpClient.removeListener('status', onStatus)
-        mcpClient.removeListener('text', onText)
-        mcpClient.removeListener('tool_start', onToolStart)
-        mcpClient.removeListener('tool_result', onToolResult)
-        mcpClient.removeListener('tool_error', onToolError)
-        mcpClient.removeListener('complete', onComplete)
+        llmClient.removeListener('start', onStart)
+        llmClient.removeListener('status', onStatus)
+        llmClient.removeListener('text', onText)
+        llmClient.removeListener('tool_start', onToolStart)
+        llmClient.removeListener('tool_result', onToolResult)
+        llmClient.removeListener('tool_error', onToolError)
+        llmClient.removeListener('complete', onComplete)
       }
     }
 
     // Register event listeners
-    mcpClient.on('start', onStart)
-    mcpClient.on('status', onStatus)
-    mcpClient.on('text', onText)
-    mcpClient.on('tool_start', onToolStart)
-    mcpClient.on('tool_result', onToolResult)
-    mcpClient.on('tool_error', onToolError)
-    mcpClient.on('complete', onComplete)
+    llmClient.on('start', onStart)
+    llmClient.on('status', onStatus)
+    llmClient.on('text', onText)
+    llmClient.on('tool_start', onToolStart)
+    llmClient.on('tool_result', onToolResult)
+    llmClient.on('tool_error', onToolError)
+    llmClient.on('complete', onComplete)
 
     // Handle client disconnect
     req.raw.on('close', () => {
-      mcpClient.removeListener('start', onStart)
-      mcpClient.removeListener('status', onStatus)
-      mcpClient.removeListener('text', onText)
-      mcpClient.removeListener('tool_start', onToolStart)
-      mcpClient.removeListener('tool_result', onToolResult)
-      mcpClient.removeListener('tool_error', onToolError)
-      mcpClient.removeListener('complete', onComplete)
+      llmClient.removeListener('start', onStart)
+      llmClient.removeListener('status', onStatus)
+      llmClient.removeListener('text', onText)
+      llmClient.removeListener('tool_start', onToolStart)
+      llmClient.removeListener('tool_result', onToolResult)
+      llmClient.removeListener('tool_error', onToolError)
+      llmClient.removeListener('complete', onComplete)
     })
 
     // Process the query from the URL parameter
     const query = req.query.query
     if (query) {
       // Add user context to the query processing
-      mcpClient.processQueryStream(query, userId).catch(error => {
+      llmClient.processQueryStream(query, userId).catch(error => {
         sendEvent('error', { error: error.message })
         reply.raw.end()
       })
@@ -369,11 +369,6 @@ try {
 }
 
 console.log(`running on port ${port}`)
-
-// Connect mcpClient only if MCP_SERVER is true
-if (process.env.MCP_SERVER === 'true') {
-  mcpClient.connectToServer(`http://localhost:${port}/sse`)
-}
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
