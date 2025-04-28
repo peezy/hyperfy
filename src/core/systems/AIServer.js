@@ -30,16 +30,28 @@ export class AIServer extends System {
         if (this.llmClient && this.llmClient.registerProvider) {
           const anthropicProvider = new AnthropicProvider({
             apiKey: process.env.ANTHROPIC_API_KEY,
-            // Optionally: model, max_tokens, systemPrompt
           });
           const openaiProvider = new OpenAIProvider({
             apiKey: process.env.OPENAI_API_KEY,
-            // Optionally: model, max_tokens, systemPrompt
           });
           this.llmClient.registerProvider('anthropic', anthropicProvider);
           this.llmClient.registerProvider('openai', openaiProvider);
-          this.llmClient.selectProvider('openai');
+          // Use the provider from settings if set, otherwise default to openai
+          const initialProvider = this.world.settings.llmProvider || 'openai';
+          this.llmClient.selectProvider(initialProvider);
           console.log('[AIServer] Registered Anthropic and OpenAI providers with AIClient');
+
+          // Listen for provider changes in settings
+          this.world.settings.on('change', changes => {
+            if (changes.llmProvider && changes.llmProvider.value) {
+              try {
+                this.llmClient.selectProvider(changes.llmProvider.value);
+                console.log(`[AIServer] Switched LLM provider to ${changes.llmProvider.value}`);
+              } catch (e) {
+                console.warn(`[AIServer] Tried to switch to unknown LLM provider: ${changes.llmProvider.value}`);
+              }
+            }
+          });
         }
       } else {
         console.log('[MCP] No MCP server provided')
@@ -194,6 +206,15 @@ export class AIServer extends System {
     
     const userId = player.data.id
     console.log(`[LLM] Starting stream for player ${userId} with query: ${query}`)
+    
+    // Select the provider based on current settings before every prompt
+    const providerKey = this.world.settings.llmProvider || 'openai';
+    try {
+      this.llmClient.selectProvider(providerKey);
+      console.log(`[AIServer] Selected LLM provider '${providerKey}' for this prompt.`);
+    } catch (e) {
+      console.warn(`[AIServer] Tried to select unknown LLM provider: ${providerKey}`);
+    }
     
     // Check if the player already has an active stream
     if (this.activeStreams.has(userId)) {

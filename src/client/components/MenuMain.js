@@ -55,10 +55,10 @@ function MenuMainIndex({ world, pop, push }) {
       {isBuilder && (
         <MenuItemBtn label='Apps' hint='View all apps in the world' onClick={() => world.ui.toggleApps()} />
       )}
-      <MenuItemBtn 
-        label='Conversation History' 
-        hint='View your AI conversation history (Shift+P)' 
-        onClick={() => world.ui.toggleConversations()} 
+      <MenuItemBtn
+        label='Conversation History'
+        hint='View your AI conversation history (Shift+P)'
+        onClick={() => world.ui.toggleConversations()}
       />
     </Menu>
   )
@@ -259,6 +259,7 @@ function MenuMainWorld({ world, pop, push }) {
   const [avatar, setAvatar] = useState(world.settings.avatar)
   const [playerLimit, setPlayerLimit] = useState(world.settings.playerLimit)
   const [publicc, setPublic] = useState(world.settings.public)
+  const [llmProvider, setLLMProvider] = useState(world.settings.llmProvider || 'anthropic')
   useEffect(() => {
     const onChange = changes => {
       if (changes.title) setTitle(changes.title.value)
@@ -267,12 +268,17 @@ function MenuMainWorld({ world, pop, push }) {
       if (changes.avatar) setAvatar(changes.avatar.value)
       if (changes.playerLimit) setPlayerLimit(changes.playerLimit.value)
       if (changes.public) setPublic(changes.public.value)
+      if (changes.llmProvider) setLLMProvider(changes.llmProvider.value)
     }
     world.settings.on('change', onChange)
     return () => {
       world.settings.off('change', onChange)
     }
   }, [])
+  const llmProviderOptions = [
+    { label: 'Anthropic', value: 'anthropic' },
+    { label: 'OpenAI', value: 'openai' },
+  ]
   return (
     <Menu title='Menu'>
       <MenuItemBack hint='Go back to the main menu' onClick={pop} />
@@ -332,6 +338,13 @@ function MenuMainWorld({ world, pop, push }) {
         onClick={() => {
           world.network.send('spawnModified', 'clear')
         }}
+      />
+      <MenuItemSwitch
+        label='AI Provider'
+        hint='Choose the LLM provider for this world'
+        options={llmProviderOptions}
+        value={llmProvider}
+        onChange={value => world.settings.set('llmProvider', value, true)}
       />
     </Menu>
   )

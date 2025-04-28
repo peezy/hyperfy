@@ -10,6 +10,7 @@ export class Settings extends System {
     this.avatar = null
     this.public = null
     this.playerLimit = null
+    this.llmProvider = null
 
     this.changes = null
   }
@@ -21,6 +22,7 @@ export class Settings extends System {
     this.avatar = data.avatar
     this.public = data.public
     this.playerLimit = data.playerLimit
+    this.llmProvider = data.llmProvider || null
     this.emit('change', {
       title: { value: this.title },
       desc: { value: this.desc },
@@ -28,6 +30,7 @@ export class Settings extends System {
       avatar: { value: this.avatar },
       public: { value: this.public },
       playerLimit: { value: this.playerLimit },
+      llmProvider: { value: this.llmProvider },
     })
   }
 
@@ -39,6 +42,7 @@ export class Settings extends System {
       avatar: this.avatar,
       public: this.public,
       playerLimit: this.playerLimit,
+      llmProvider: this.llmProvider,
     }
   }
 
