@@ -149,13 +149,6 @@ export class AIServer extends System {
       return { success: false, error: error.message || 'Unknown error' }
     }
   }
-  
-  /**
-   * Register network message handlers for AI functionality
-   */
-  registerNetworkHandlers() {
-    // These are now handled by the onAiProcessQuery and onAiCancelStream methods
-  }
 
   /**
    * Starts an LLM stream for a player with the given query
@@ -359,10 +352,7 @@ export class AIServer extends System {
     }
 
     try {
-      console.log(`[MCP] Registering tool '${toolName}' with schema:`, schema)
-
-      // Convert the schema to Zod schema
-    //   const zodSchema = translateSchema(schema)
+      console.log(`[MCP] Registering tool '${toolName}' `)
 
       // Create a wrapper handler that formats the response to MCP standard
       const wrappedHandler = async params => {
@@ -395,21 +385,9 @@ export class AIServer extends System {
 
       // Register the tool with the MCP server
       this.mcp.tool(toolName, schema, wrappedHandler)
-    //   appServer.tool(
-    //     'greet',
-    //     {
-    //       name: z.string().describe('Name of the person to greet'),
-    //     },
-    //     ({ name }) => {
-    //       return {
-    //         content: [{ type: 'text', text: `Hello ${name}!` }],
-    //       }
-    //     }
-    //   )
-      // Keep track of registered tools
-      this.appTools.set(toolName, { schema, handler, entityId })
 
-    //   this.mcp.servers.sendToolListChanged()
+      // Keep track of registered tools
+      this.appTools.set(toolName, { schema, handler: wrappedHandler, entityId })
       
 
       console.log(`[MCP] Successfully registered tool '${toolName}'`)

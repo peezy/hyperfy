@@ -60,7 +60,7 @@ const mcp = new McpServer({
 world.init({ db, storage, loadPhysX, mcp, llmClient })
 
 // Create an auth handler function to validate tokens and return player IDs
-const authHandler = async (authToken) => {
+const authHandler = async authToken => {
   try {
     const { userId } = await readJWT(authToken)
     return userId
@@ -75,150 +75,8 @@ fastify.register(fastifyMCPSSE, {
   server: mcp,
   authHandler,
   sseEndpoint: '/sse',
-  messagesEndpoint: '/messages'
+  messagesEndpoint: '/messages',
 })
-
-// Add SSE endpoint for streaming AI responses
-fastify.get('/mcp/stream', async (req, reply) => {
-  try {
-    // Get auth token from query parameter or header
-    const authToken = req.query.authToken || req.headers.authorization?.replace('Bearer ', '')
-
-    if (!authToken) {
-      reply.code(401).send({ error: 'Authentication required' })
-      return
-    }
-
-    // Validate token and get user
-    let userId = null
-
-    try {
-      // Verify JWT token
-      const { userId: tokenUserId } = await readJWT(authToken)
-      userId = tokenUserId
-
-      // Get player from world entities
-      const player = world.entities.getPlayer(userId)
-
-      if (!player) {
-        reply.code(403).send({ error: 'Player not found' })
-        return
-      }
-
-      // Check if user has admin permissions using ServerNetwork's isAdmin method
-      if (!world.network.isAdmin(player) && !world.settings.public) {
-        reply.code(403).send({ error: 'Unauthorized' })
-        return
-      }
-
-    } catch (err) {
-      console.error('Failed to authenticate user for MCP stream:', err)
-      reply.code(401).send({ error: 'Invalid authentication token' })
-      return
-    }
-
-    // Set SSE headers
-    reply.raw.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
-    })
-
-    const sendEvent = (event, data) => {
-      reply.raw.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-    }
-
-    // Set up event handlers for this request - only process events for this user
-    const onStart = (data) => {
-      if (data.userId === userId || !data.userId) {
-        sendEvent('start', data)
-      }
-    }
-
-    const onStatus = (data) => {
-      if (data.userId === userId || !data.userId) {
-        sendEvent('status', data)
-      }
-    }
-
-    const onText = (data) => {
-      if (data.userId === userId || !data.userId) {
-        sendEvent('text', data)
-      }
-    }
-
-    const onToolStart = (data) => {
-      if (data.userId === userId || !data.userId) {
-        sendEvent('tool_start', data)
-      }
-    }
-
-    const onToolResult = (data) => {
-      if (data.userId === userId || !data.userId) {
-        sendEvent('tool_result', data)
-      }
-    }
-
-    const onToolError = (data) => {
-      if (data.userId === userId || !data.userId) {
-        sendEvent('tool_error', data)
-      }
-    }
-
-    const onComplete = (data) => {
-      if (data.userId === userId || !data.userId) {
-        sendEvent('complete', data)
-        reply.raw.end()
-
-        // Clean up event listeners
-        llmClient.removeListener('start', onStart)
-        llmClient.removeListener('status', onStatus)
-        llmClient.removeListener('text', onText)
-        llmClient.removeListener('tool_start', onToolStart)
-        llmClient.removeListener('tool_result', onToolResult)
-        llmClient.removeListener('tool_error', onToolError)
-        llmClient.removeListener('complete', onComplete)
-      }
-    }
-
-    // Register event listeners
-    llmClient.on('start', onStart)
-    llmClient.on('status', onStatus)
-    llmClient.on('text', onText)
-    llmClient.on('tool_start', onToolStart)
-    llmClient.on('tool_result', onToolResult)
-    llmClient.on('tool_error', onToolError)
-    llmClient.on('complete', onComplete)
-
-    // Handle client disconnect
-    req.raw.on('close', () => {
-      llmClient.removeListener('start', onStart)
-      llmClient.removeListener('status', onStatus)
-      llmClient.removeListener('text', onText)
-      llmClient.removeListener('tool_start', onToolStart)
-      llmClient.removeListener('tool_result', onToolResult)
-      llmClient.removeListener('tool_error', onToolError)
-      llmClient.removeListener('complete', onComplete)
-    })
-
-    // Process the query from the URL parameter
-    const query = req.query.query
-    if (query) {
-      // Add user context to the query processing
-      llmClient.processQueryStream(query, userId).catch(error => {
-        sendEvent('error', { error: error.message })
-        reply.raw.end()
-      })
-    } else {
-      sendEvent('error', { error: 'Missing query parameter' })
-      reply.raw.end()
-    }
-  } catch (err) {
-    console.error('Error in MCP stream endpoint:', err)
-    reply.code(500).send({ error: 'Internal server error' })
-  }
-})
-
 
 fastify.register(cors)
 fastify.register(compress)

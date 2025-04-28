@@ -1,33 +1,45 @@
-import { Anthropic } from '@anthropic-ai/sdk'
 import { EventEmitter } from 'events'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
-
-
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY
-if (!ANTHROPIC_API_KEY) {
-  throw new Error('ANTHROPIC_API_KEY is not set')
-}
+import { AnthropicProvider } from './providers/AnthropicProvider.js'
 
 export class AIClient extends EventEmitter {
-  mcp
-  anthropic
-  transport
-  tools
-  resources
+  mcp;
+  llmProviders = {};
+  selectedProvider = 'anthropic';
+  transport;
+  tools;
+  resources;
 
-  constructor() {
-    super()
-    console.log('Initializing MCPClient...')
-    // Initialize Anthropic client and MCP client
-    this.anthropic = new Anthropic({
-      apiKey: ANTHROPIC_API_KEY,
-    })
-    console.log('Anthropic client initialized')
-    this.mcp = new Client({ name: 'mcp-client-cli', version: '1.0.0' })
-    console.log('MCP client initialized')
-    // Store available resources
-    this.resources = []
+  constructor({ llmProvider, llmProviders } = {}) {
+    super();
+    console.log('Initializing MCPClient...');
+    // Support multiple providers
+    if (llmProviders) {
+      this.llmProviders = { ...llmProviders };
+      this.selectedProvider = Object.keys(llmProviders)[0] || 'anthropic';
+    } else {
+      // Fallback to single provider as 'anthropic'
+      const provider = llmProvider || new AnthropicProvider({ apiKey: process.env.ANTHROPIC_API_KEY });
+      this.llmProviders = { anthropic: provider };
+      this.selectedProvider = 'anthropic';
+    }
+    this.mcp = new Client({ name: 'mcp-client-cli', version: '1.0.0' });
+    console.log('MCP client initialized');
+    this.resources = [];
+  }
+
+  registerProvider(key, provider) {
+    this.llmProviders[key] = provider;
+  }
+
+  selectProvider(key) {
+    if (!this.llmProviders[key]) throw new Error(`Provider '${key}' not found`);
+    this.selectedProvider = key;
+  }
+
+  getCurrentProvider() {
+    return this.llmProviders[this.selectedProvider];
   }
 
   async connectToServer(serverUrl) {
@@ -139,12 +151,13 @@ export class AIClient extends EventEmitter {
     }
   }
 
-  async processQueryStream(query, userId = null) {
+  async processQueryStream(query, userId = null, providerKey = null) {
     /**
      * Process a query using Claude and available tools with streaming updates
      *
      * @param query - The user's input query
      * @param userId - Optional user ID for context and permission checking
+     * @param providerKey - Optional provider key to override the selected provider
      * @returns Processed response as a string
      */
     console.log(`Processing query: "${query}" for user: ${userId || 'anonymous'}`)
@@ -169,6 +182,10 @@ export class AIClient extends EventEmitter {
     
     this.emit('start', { query, userId })
     
+    // Use selected provider or override
+    const provider = providerKey ? this.llmProviders[providerKey] : this.getCurrentProvider();
+    if (!provider) throw new Error('No LLM provider available');
+    
     // Try to get scripting rules and prepare system prompt
     let systemPrompt = "You are a helpful AI assistant for the Hyperfy platform.";
     try {
@@ -181,138 +198,16 @@ export class AIClient extends EventEmitter {
       console.warn("Failed to load scripting rules for system prompt:", err);
     }
     
-    const messages = [
-      {
-        role: 'user',
-        content: query,
-      },
-    ]
-
-    // Add user context if available
-    if (userId) {
-      this.emit('status', { status: `Processing request for user ${userId.substring(0, 8)}...`, userId })
-    } else {
-      this.emit('status', { status: 'Thinking...', userId })
-    }
-    
-    // Initial Claude API call
-    console.log('Sending request to Claude API...')
-    
-    const initialResponse = await this.anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
-      max_tokens: 8192,
-      system: systemPrompt,
-      messages,
+    // Delegate the full loop to the provider
+    return provider.handlePromptLoop({
+      query,
+      userId,
       tools: this.tools,
-    })
-    console.log('Received response from Claude:', JSON.stringify(initialResponse.id))
-
-    // Process response and handle tool calls
-    const finalText = []
-    const toolResults = []
-
-    // Function to process a response recursively
-    const processResponse = async (response) => {
-      console.log(`Processing ${response.content.length} content blocks from Claude`)
-      for (const content of response.content) {
-        console.log(`Processing content of type: ${content.type}`)
-        if (content.type === 'text') {
-          console.log('Adding text response to output')
-          finalText.push(content.text)
-          this.emit('text', { text: content.text, userId })
-        } else if (content.type === 'tool_use') {
-          // Execute tool call
-          const toolName = content.name
-          const toolArgs = content.input
-          console.log(`Executing tool call: ${toolName} with args:`, JSON.stringify(toolArgs))
-          
-          this.emit('tool_start', { 
-            tool: toolName,
-            args: toolArgs,
-            userId
-          })
-
-          try {
-            // Store userId in metadata for tool context
-            const contextData = userId ? { userId } : undefined
-            
-            const result = await this.mcp.callTool({
-              name: toolName,
-              arguments: toolArgs,
-              metadata: contextData,
-            }, 
-            undefined, {
-              timeout: 90000
-            })
-            console.log(`Tool execution result:`, JSON.stringify(result))
-            toolResults.push(result)
-            
-            this.emit('tool_result', { 
-              tool: toolName,
-              result: result,
-              userId
-            })
-
-            // Continue conversation with tool results
-            console.log('Adding tool result to messages for follow-up')
-            const toolId = `tool_${Date.now()}`;
-            
-            // Add the assistant's tool use message
-            messages.push({
-              role: 'assistant',
-              content: [{ 
-                type: 'tool_use', 
-                id: toolId, 
-                name: toolName, 
-                input: toolArgs 
-              }]
-            })
-            
-            // Add the tool result message in proper format
-            messages.push({
-              role: 'user',
-              content: [
-                {
-                  type: 'tool_result',
-                  tool_use_id: toolId,
-                  content: result.content
-                }
-              ]
-            })
-
-            // Get next response from Claude
-            this.emit('status', { status: 'Processing results...', userId })
-            console.log('Sending follow-up request to Claude with tool results...')
-            const followUpResponse = await this.anthropic.messages.create({
-              model: 'claude-3-5-sonnet-20241022',
-              max_tokens: 8192,
-              system: systemPrompt,
-              messages,
-              tools: this.tools,
-            })
-            console.log('Received follow-up response from Claude:', JSON.stringify(followUpResponse.id))
-            
-            // Process the follow-up response recursively
-            await processResponse(followUpResponse)
-          } catch (error) {
-            console.error(`Error executing tool ${toolName}:`, error)
-            this.emit('tool_error', { 
-              tool: toolName,
-              error: error.message,
-              userId 
-            })
-            finalText.push(`[Error executing tool ${toolName}: ${error.message}]`)
-          }
-        }
-      }
-    }
-    
-    // Start processing with the initial response
-    await processResponse(initialResponse)
-
-    this.emit('complete', { response: finalText.join('\n'), userId })
-    console.log('Query processing complete')
-    return finalText.join('\n')
+      systemPrompt,
+      mcp: this.mcp,
+      emit: this.emit.bind(this),
+      getScriptingRules: this.getScriptingRules.bind(this),
+    });
   }
 
   async processQuery(query) {
