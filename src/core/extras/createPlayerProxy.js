@@ -164,5 +164,23 @@ export function createPlayerProxy(entity, player) {
       }
       world.livekit.setScreenShareTarget(targetId)
     },
+    setDoubleJumpEnabled(enabled) {
+      if (player.data.owner === world.network.id) {
+        player.setDoubleJumpEnabled(enabled)
+      }
+    },
+    isInAir() {
+      return player.isInAir()
+    },
+    setZoom(zoomValue) {
+      if (player.data.owner === world.network.id) {
+        player.setZoom(zoomValue)
+      }
+    },
+    setZoomEnabled(enabled) {
+      if (player.data.owner === world.network.id) {
+        player.setZoomEnabled(enabled)
+      }
+    },
   }
 }
