@@ -1017,6 +1017,7 @@ export class PlayerLocal extends Entity {
       this.data.health = data.health
       this.nametag.health = data.health
       this.world.events.emit('health', { playerId: this.data.id, health: data.health })
+      console.log('modify', data.health)
       // changed = true
     }
     if (data.hasOwnProperty('avatar')) {
