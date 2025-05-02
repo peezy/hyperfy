@@ -193,4 +193,20 @@ const migrations = [
       await db('config').where('key', 'config').delete()
     }
   },
+  // REMOVED: tokenBalances table migration (placeholder for migration order)
+  async db => {
+    // This migration has been removed - placeholder for backward compatibility
+  },
+  // REMOVED: tokenSyncState table migration (placeholder for migration order)
+  async db => {
+    // This migration has been removed - placeholder for backward compatibility
+  },
+  // REMOVED: processedTransactions table migration (placeholder for migration order)
+  async db => {
+    // This migration has been removed - placeholder for backward compatibility
+  },
+  // REMOVED: tokenBalanceAuditLog table migration (placeholder for migration order)
+  async db => {
+    // This migration has been removed - placeholder for backward compatibility
+  },
 ]

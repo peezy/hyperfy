@@ -153,7 +153,6 @@ export class Nametags extends System {
         if (nametag.health === health) return
         nametag.health = health
         this.draw(nametag)
-        console.log('SET HEALTH', health)
       },
       destroy: () => {
         this.remove(nametag)

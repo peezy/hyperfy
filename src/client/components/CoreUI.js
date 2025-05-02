@@ -96,27 +96,29 @@ function Content({ world, width, height }) {
     }
   }, [])
   return (
-    <div
-      ref={ref}
-      className='coreui'
-      css={css`
-        position: absolute;
-        inset: 0;
-        display: ${visible ? 'block' : 'none'};
-      `}
-    >
-      {disconnected && <Disconnected />}
-      <Reticle world={world} />
-      {<Toast world={world} />}
-      {ready && <Side world={world} player={player} menu={menu} />}
-      {ready && menu?.type === 'app' && code && (
-        <CodeEditor key={`code-${menu.app.data.id}`} world={world} app={menu.app} blur={menu.blur} />
-      )}
-      {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}
-      {apps && <AppsPane world={world} close={() => world.ui.toggleApps()} />}
-      {!ready && <LoadingOverlay />}
-      {kicked && <KickedOverlay code={kicked} />}
-    </div>
+    <>
+      <div
+        ref={ref}
+        className='coreui'
+        css={css`
+          position: absolute;
+          inset: 0;
+          display: ${visible ? 'block' : 'none'};
+        `}
+      >
+        {disconnected && <Disconnected />}
+        <Reticle world={world} />
+        {<Toast world={world} />}
+        {ready && <Side world={world} player={player} menu={menu} />}
+        {ready && menu?.type === 'app' && code && (
+          <CodeEditor key={`code-${menu.app.data.id}`} world={world} app={menu.app} blur={menu.blur} />
+        )}
+        {avatar && <AvatarPane key={avatar.hash} world={world} info={avatar} />}
+        {apps && <AppsPane world={world} close={() => world.ui.toggleApps()} />}
+        {!ready && <LoadingOverlay />}
+        {kicked && <KickedOverlay code={kicked} />}
+      </div>
+    </>
   )
 }
 
@@ -637,16 +639,56 @@ function Reticle({ world }) {
         display: flex;
         align-items: center;
         justify-content: center;
-        .reticle-item {
-          width: 20px;
-          height: 20px;
-          border-radius: 10px;
-          border: 2px solid ${buildMode ? '#ff4d4d' : 'white'};
-          mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
+        pointer-events: none;
+
+        .crosshair {
+          position: relative;
+          width: 30px;
+          height: 30px;
+
+          &::before,
+          &::after {
+            content: '';
+            position: absolute;
+            background-color: ${buildMode ? '#ff4d4d' : 'white'};
+            mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
+          }
+
+          /* Horizontal line */
+          &::before {
+            width: 100%;
+            height: 2px;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+          }
+
+          /* Vertical line */
+          &::after {
+            width: 2px;
+            height: 100%;
+            left: 50%;
+            top: 0;
+            transform: translateX(-50%);
+          }
+
+          .center-dot {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background-color: ${buildMode ? '#ff4d4d' : 'white'};
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            mix-blend-mode: ${buildMode ? 'normal' : 'difference'};
+          }
         }
       `}
     >
-      <div className='reticle-item' />
+      <div className='crosshair'>
+        <div className='center-dot'></div>
+      </div>
     </div>
   )
 }

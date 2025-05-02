@@ -6,3 +6,5 @@
 node_modules/
 build/
 /world*
+fly.toml
+tps

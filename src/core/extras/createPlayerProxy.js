@@ -54,6 +54,9 @@ export function createPlayerProxy(player) {
     get destroyed() {
       return !!player.destroyed
     },
+    get solana() {
+      return player.data.solana
+    },
     teleport(position, rotationY) {
       if (player.data.owner === world.network.id) {
         // if player is local we can set directly
@@ -153,6 +156,24 @@ export function createPlayerProxy(player) {
       } else {
         // if we're the server we need to notify the player
         world.network.sendTo(player.data.owner, 'playerPush', { force })
+      }
+    },
+    setDoubleJumpEnabled(enabled) {
+      if (player.data.owner === world.network.id) {
+        player.setDoubleJumpEnabled(enabled)
+      }
+    },
+    isInAir() {
+      return player.isInAir()
+    },
+    setZoom(zoomValue) {
+      if (player.data.owner === world.network.id) {
+        player.setZoom(zoomValue)
+      }
+    },
+    setZoomEnabled(enabled) {
+      if (player.data.owner === world.network.id) {
+        player.setZoomEnabled(enabled)
       }
     },
   }
