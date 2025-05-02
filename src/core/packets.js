@@ -22,8 +22,6 @@ const names = [
   'kick',
   'ping',
   'pong',
-  'requestTokenMetadata',
-  'tokenMetadata',
 ]
 
 const byName = {}

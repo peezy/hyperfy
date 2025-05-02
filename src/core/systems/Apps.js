@@ -213,9 +213,6 @@ export class Apps extends System {
           }
         })
       },
-      world: () => {
-        return { ...worldProxy }
-      },
     }
   }
 
