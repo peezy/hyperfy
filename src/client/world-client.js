@@ -19,8 +19,8 @@ export function Client({ wsUrl, onSetup }) {
       const ui = uiRef.current
       const baseEnvironment = {
         model: '/base-environment.glb',
-        bg: '/day2-2k.jpg',
-        hdr: '/day2.hdr',
+        bg: '/skybox.jpg',
+        hdr: '/sky.hdr',
         sunDirection: new THREE.Vector3(-1, -2, -2).normalize(),
         sunIntensity: 1,
         sunColor: 0xffffff,

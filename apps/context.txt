@@ -1,0 +1,16 @@
+Context:
+This is a custom javascript scripting environment which is very strict
+It is built ontop of three.js but only these variables are directly exposed as globals:
+- Vector3
+- Quaternion
+It is made up of models, which scripts are inserted into, the combination is referred to as "Apps"
+Apps can communicate data with:
+- app.send('event', data, skipId (server only))
+    - sends data between client and server on same app, can skip client id if on server
+- app.on('event' (data)=>{})
+    - listens to events from the same app on the client or server
+- app.emit('event', data)
+    - emits an event to other apps, but only works on the server
+- world.on('event', data)
+    - listens to data from other apps, but only works on the server
+- app.state is sent to clients when they enter world but not sync'd afterwards
