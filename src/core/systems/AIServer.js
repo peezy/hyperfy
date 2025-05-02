@@ -147,7 +147,7 @@ export class AIServer extends System {
               this.world.settings.set('llmModel', selectedProvider.defaultModel, true);
             }
 
-            this.world.network.saveSettings();
+            // this.world.network.saveSettings();
             
             // Listen for provider changes in settings
             this.world.settings.on('change', changes => {
@@ -200,7 +200,7 @@ export class AIServer extends System {
             this.world.settings.set('llmProvider', null, true);
             this.world.settings.set('llmProviders', [], true);
             this.world.settings.set('llmModel', null, true);
-            this.world.network.saveSettings();
+            // this.world.network.saveSettings();
           }
         }
       } else {
