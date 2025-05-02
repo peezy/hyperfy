@@ -203,6 +203,29 @@ export class Apps extends System {
           }
         })
       },
+      world: () => {
+        return { ...worldProxy }
+      },
+      solana() {
+        // Mock Solana API for backward compatibility
+        return {
+          connection: null,
+          publicKey: null,
+          mode: 'disabled',
+          getBalance: async () => 0,
+          isWatchMode: () => false,
+          isActiveMode: () => false,
+          getMode: () => 'disabled',
+          programs: {
+            token: async () => ({
+              balance: 0,
+              transfer: async () => ({ success: false, error: 'Solana support has been removed' })
+            })
+          },
+          sign: async () => ({ success: false, error: 'Solana support has been removed' }),
+          validateSignature: async () => ({ success: false, error: 'Solana support has been removed' })
+        }
+      },
     }
   }
 
@@ -299,10 +322,6 @@ export class Apps extends System {
           }
         }
         entity.onFields?.(entity.fields)
-      },
-      solana() {
-        const { world: _world, ...solana } = world.solana // do not expose entire world to script
-        return solana
       },
     }
   }

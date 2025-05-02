@@ -10,8 +10,6 @@ import { CoreUI } from './components/CoreUI'
 
 export { System } from '../core/systems/System'
 
-import { WalletProvider } from './components/WalletProvider'
-
 export function Client({ wsUrl, onSetup }) {
   const viewportRef = useRef()
   const uiRef = useRef()
@@ -65,9 +63,7 @@ export function Client({ wsUrl, onSetup }) {
     >
       <div className='App__viewport' ref={viewportRef}>
         <div className='App__ui' ref={uiRef}>
-          <WalletProvider>
-            <CoreUI world={world} />
-          </WalletProvider>
+          <CoreUI world={world} />
         </div>
       </div>
     </div>

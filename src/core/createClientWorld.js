@@ -19,7 +19,6 @@ import { Nametags } from './systems/Nametags'
 import { Snaps } from './systems/Snaps'
 import { Wind } from './systems/Wind'
 import { XR } from './systems/XR'
-import { Solana } from './systems/ClientSolana'
 
 export function createClientWorld() {
   const world = new World()
@@ -42,6 +41,5 @@ export function createClientWorld() {
   world.register('snaps', Snaps)
   world.register('wind', Wind)
   world.register('xr', XR)
-  world.register('solana', Solana)
   return world
 }
