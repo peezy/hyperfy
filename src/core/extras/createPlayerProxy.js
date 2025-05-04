@@ -188,7 +188,7 @@ export function createPlayerProxy(entity, player) {
     
     // Add methods
     for (const key in world.apps.playerMethods) {
-      proxy[key] = (...args) => world.apps.playerMethods[key](player, ...args)
+      proxy[key] = (...args) => world.apps.playerMethods[key](entity, player, ...args)
     }
   }
   

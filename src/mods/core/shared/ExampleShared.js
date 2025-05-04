@@ -23,12 +23,20 @@ export default class ExampleShared extends System {
       // Add custom player properties and methods
       player: {
         // Custom method
-        greet(player, message = 'Hello') {
+        greet(entity, player, message = 'Hello') {
           const name = player.data.name || 'Player'
           console.log(`${message}, ${name}!`)
           return `${message}, ${name}!`
         },
+        test(entity, player) {
+          console.log('test', self)
+          self.test(player)
+        }
       }
     })
+  }
+
+  test(player) {
+    console.log('test', ExampleShared.name, player)
   }
 }
