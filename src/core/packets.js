@@ -44,6 +44,23 @@ function capitalize(str) {
   return str.charAt(0).toUpperCase() + str.slice(1)
 }
 
+export function addPacket(name) {
+  if (byName[name]) {
+    return // Packet already exists
+  }
+  
+  const id = ++ids
+  const info = {
+    id,
+    name,
+    method: `on${capitalize(name)}`,
+  }
+  byName[name] = info
+  byId[id] = info
+  
+  return info
+}
+
 export function writePacket(name, data) {
   const info = byName[name]
   if (!info) throw new Error(`writePacket failed: ${name} (name not found)`)

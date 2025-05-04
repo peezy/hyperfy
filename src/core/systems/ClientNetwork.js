@@ -1,6 +1,6 @@
 import moment from 'moment'
 import { emoteUrls } from '../extras/playerEmotes'
-import { readPacket, writePacket } from '../packets'
+import { readPacket, writePacket, addPacket } from '../packets'
 import { storage } from '../storage'
 import { uuid } from '../utils'
 import { hashFile } from '../utils-client'
@@ -226,5 +226,9 @@ export class ClientNetwork extends System {
       }
       this.ws = null
     }
+  }
+
+  addPacket(name) {
+    return addPacket(name)
   }
 }

@@ -32,6 +32,7 @@ export class Apps extends System {
     super(world)
     this.initWorldHooks()
     this.initAppHooks()
+    this.initPlayerHooks()
   }
 
   initWorldHooks() {
@@ -319,7 +320,13 @@ export class Apps extends System {
     }
   }
 
-  inject({ world, app }) {
+  initPlayerHooks() {
+    this.playerGetters = {}
+    this.playerSetters = {}
+    this.playerMethods = {}
+  }
+
+  inject({ world, app, player }) {
     if (world) {
       for (const key in world) {
         const value = world[key]
@@ -349,6 +356,22 @@ export class Apps extends System {
         }
         if (value.set) {
           this.appSetters[key] = value.set
+        }
+      }
+    }
+    if (player) {
+      for (const key in player) {
+        const value = player[key]
+        const isFunction = typeof value === 'function'
+        if (isFunction) {
+          this.playerMethods[key] = value
+          continue
+        }
+        if (value.get) {
+          this.playerGetters[key] = value.get
+        }
+        if (value.set) {
+          this.playerSetters[key] = value.set
         }
       }
     }

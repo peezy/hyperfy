@@ -1,5 +1,5 @@
 import moment from 'moment'
-import { writePacket } from '../packets'
+import { writePacket, addPacket } from '../packets'
 import { Socket } from '../Socket'
 import { addRole, hasRole, removeRole, serializeRoles, uuid } from '../utils'
 import { System } from './System'
@@ -87,6 +87,9 @@ export class ServerNetwork extends System {
   }
 
   sendTo(socketId, name, data) {
+    if (name === 'myPacket') {
+      console.log('sendTo', socketId, name, data)
+    }
     const socket = this.sockets.get(socketId)
     socket?.send(name, data)
   }
@@ -523,5 +526,9 @@ export class ServerNetwork extends System {
   onDisconnect = (socket, code) => {
     socket.player.destroy(true)
     this.sockets.delete(socket.id)
+  }
+
+  addPacket(name) {
+    return addPacket(name)
   }
 }
