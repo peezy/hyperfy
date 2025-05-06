@@ -87,6 +87,9 @@ export class ServerNetwork extends System {
   }
 
   sendTo(socketId, name, data) {
+    if (name === 'myPacket') {
+      console.log('sendTo', socketId, name, data)
+    }
     const socket = this.sockets.get(socketId)
     socket?.send(name, data)
   }
