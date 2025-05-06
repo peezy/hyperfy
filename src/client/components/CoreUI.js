@@ -18,6 +18,7 @@ import { ControlPriorities } from '../../core/extras/ControlPriorities'
 // import { MenuApp } from './MenuApp'
 import { ChevronDoubleUpIcon, HandIcon } from './Icons'
 import { Sidebar } from './Sidebar'
+import { ModsComponents } from './ModsComponents'
 
 export function CoreUI({ world }) {
   const [ref, width, height] = useElemSize()
@@ -121,6 +122,7 @@ function Content({ world, width, height }) {
       {!ready && <LoadingOverlay />}
       {kicked && <KickedOverlay code={kicked} />}
       {ready && isTouch && <TouchBtns world={world} />}
+      {ready && <ModsComponents world={world} />}
       <div id='core-ui-portal' />
     </div>
   )
