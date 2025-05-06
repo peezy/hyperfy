@@ -35,6 +35,7 @@ import {
   FieldNumber,
   FieldRange,
   FieldSwitch,
+  FieldSwitchOrEdit,
   FieldText,
   FieldTextarea,
   FieldToggle,
@@ -54,10 +55,13 @@ import { DEG2RAD, RAD2DEG } from '../../core/extras/general'
 import * as THREE from '../../core/extras/three'
 import { isTouch } from '../utils'
 import { uuid } from '../../core/utils'
+import { ModSidebarButtons, ModSidebarPanes } from '../../mods/.gen/ModSidebar'
 
 const mainSectionPanes = ['prefs']
-const worldSectionPanes = ['world', 'docs', 'apps', 'add']
+const worldSectionPanes = ['world', 'docs', 'apps', 'add', 'ai']
 const appSectionPanes = ['app', 'script', 'nodes', 'meta']
+// Create array of mod pane ids
+const modSectionPanes = Object.keys(ModSidebarPanes).map(id => `mod-${id}`)
 
 const e1 = new THREE.Euler(0, 0, 0, 'YXZ')
 const q1 = new THREE.Quaternion()
@@ -219,6 +223,21 @@ export function Sidebar({ world, ui }) {
               </Btn>
             </Section>
           )}
+          {/* Only render mod section if there are any mod buttons */}
+          {Object.keys(ModSidebarButtons).length > 0 && (
+            <Section active={modSectionPanes.includes(activePane)} top>
+              {Object.entries(ModSidebarButtons).map(([id, Button]) => (
+                <Btn
+                  key={id}
+                  active={activePane === `mod-${id}`}
+                  suspended={ui.pane === `mod-${id}` && !activePane}
+                  onClick={() => world.ui.togglePane(`mod-${id}`)}
+                >
+                  <Button world={world} />
+                </Btn>
+              ))}
+            </Section>
+          )}
         </div>
         {ui.pane === 'prefs' && <Prefs world={world} hidden={!ui.active} />}
         {ui.pane === 'world' && <World world={world} hidden={!ui.active} />}
@@ -228,6 +247,10 @@ export function Sidebar({ world, ui }) {
         {ui.pane === 'script' && <Script key={ui.app.data.id} world={world} hidden={!ui.active} />}
         {ui.pane === 'nodes' && <Nodes key={ui.app.data.id} world={world} hidden={!ui.active} />}
         {ui.pane === 'meta' && <Meta key={ui.app.data.id} world={world} hidden={!ui.active} />}
+        {/* Render mod panes */}
+        {Object.entries(ModSidebarPanes).map(([id, Pane]) => (
+          ui.pane === `mod-${id}` && <Pane key={id} world={world} hidden={!ui.active} />
+        ))}
       </div>
     </HintProvider>
   )
@@ -588,6 +611,10 @@ function World({ world, hidden }) {
   const [avatar, setAvatar] = useState(world.settings.avatar)
   const [playerLimit, setPlayerLimit] = useState(world.settings.playerLimit)
   const [publicc, setPublic] = useState(world.settings.public)
+  const [llmProvider, setLLMProvider] = useState(world.settings.llmProvider)
+  const [llmProviders, setLLMProviders] = useState(world.settings.llmProviders || [])
+  const [llmModel, setLLMModel] = useState(world.settings.llmModel || '')
+
   useEffect(() => {
     const onChange = changes => {
       if (changes.title) setTitle(changes.title.value)
@@ -596,12 +623,39 @@ function World({ world, hidden }) {
       if (changes.avatar) setAvatar(changes.avatar.value)
       if (changes.playerLimit) setPlayerLimit(changes.playerLimit.value)
       if (changes.public) setPublic(changes.public.value)
+      if (changes.llmProvider) setLLMProvider(changes.llmProvider.value)
+      if (changes.llmProviders) setLLMProviders(changes.llmProviders.value)
+      if (changes.llmModel) setLLMModel(changes.llmModel.value)
     }
     world.settings.on('change', onChange)
     return () => {
       world.settings.off('change', onChange)
     }
   }, [])
+
+  // Convert providers array to options format expected by FieldSwitch
+  const llmProviderOptions = useMemo(
+    () =>
+      llmProviders.map(provider => ({
+        label: provider.label,
+        value: provider.id,
+      })),
+    [llmProviders]
+  )
+
+  // Get the current provider's suggested models
+  const currentProvider = useMemo(() => llmProviders.find(p => p.id === llmProvider), [llmProvider, llmProviders])
+
+  // Create model options from current provider's available models
+  const modelOptions = useMemo(() => {
+    if (!currentProvider || !currentProvider.availableModels) return []
+
+    return currentProvider.availableModels.map(modelId => ({
+      label: modelId,
+      value: modelId,
+    }))
+  }, [currentProvider])
+
   return (
     <Pane hidden={hidden}>
       <div
@@ -673,12 +727,32 @@ function World({ world, hidden }) {
             onChange={value => world.settings.set('playerLimit', value, true)}
           />
           {isAdmin && (
-            <FieldToggle
-              label='Public'
-              hint='Allow everyone to build (and destroy) things in the world. When disabled only admins can build.'
-              value={publicc}
-              onChange={value => world.settings.set('public', value, true)}
-            />
+            <>
+              <FieldToggle
+                label='Public'
+                hint='Allow everyone to build (and destroy) things in the world. When disabled only admins can build.'
+                value={publicc}
+                onChange={value => world.settings.set('public', value, true)}
+              />
+              {llmProviderOptions.length > 0 && (
+                <>
+                  <FieldSwitch
+                    label='AI Provider'
+                    hint='Choose the LLM provider for this world'
+                    options={llmProviderOptions}
+                    value={llmProvider}
+                    onChange={value => world.settings.set('llmProvider', value, true)}
+                  />
+                  <FieldSwitchOrEdit
+                    label='AI Model'
+                    hint='Choose or specify a model for the selected AI provider'
+                    options={modelOptions}
+                    value={llmModel}
+                    onChange={value => world.settings.set('llmModel', value, true)}
+                  />
+                </>
+              )}
+            </>
           )}
           {/* <FieldBtn
           label='Set Spawn'
@@ -1607,3 +1681,6 @@ function Meta({ world, hidden }) {
     </Pane>
   )
 }
+
+// Export these components so they can be reused by mods
+export { Section, Btn, Content, Pane, Hint, Group }
