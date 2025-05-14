@@ -1,6 +1,12 @@
 # Build stage
 FROM node:22.11.0-alpine AS builder
+
+# Install curl, Python and build tools
+RUN apk add --no-cache curl python3 make g++ linux-headers eudev-dev
+
+# Set the working directory
 WORKDIR /app
+
 
 # Copy package.json and package-lock.json to leverage layer caching
 COPY package.json package-lock.json ./
