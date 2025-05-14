@@ -6,6 +6,26 @@ export const Emotes = {
   FALL: 'asset://emote-fall.glb',
   FLIP: 'asset://emote-flip.glb',
   TALK: 'asset://emote-talk.glb',
+  STRAFE_LEFT: 'asset://emote-strafe-left.glb',
+  STRAFE_RIGHT: 'asset://emote-strafe-right.glb',
+  RUN_STRAFE_LEFT: 'asset://emote-run-strafe-left.glb',
+  RUN_STRAFE_RIGHT: 'asset://emote-run-strafe-right.glb',
+  WALK_BACKWARD: 'asset://emote-walk-backward.glb',
+  RUN_BACKWARD: 'asset://emote-run-backward.glb',
 }
 
-export const emoteUrls = [Emotes.IDLE, Emotes.WALK, Emotes.RUN, Emotes.FLOAT, Emotes.FALL, Emotes.FLIP, Emotes.TALK]
+export const emoteUrls = [
+  Emotes.IDLE,
+  Emotes.WALK,
+  Emotes.RUN,
+  Emotes.FLOAT,
+  Emotes.FALL,
+  Emotes.FLIP,
+  Emotes.TALK,
+  Emotes.STRAFE_LEFT,
+  Emotes.STRAFE_RIGHT,
+  Emotes.RUN_STRAFE_LEFT,
+  Emotes.RUN_STRAFE_RIGHT,
+  Emotes.WALK_BACKWARD,
+  Emotes.RUN_BACKWARD,
+]

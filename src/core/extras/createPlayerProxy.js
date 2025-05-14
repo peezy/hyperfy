@@ -164,5 +164,10 @@ export function createPlayerProxy(entity, player) {
       }
       world.livekit.setScreenShareTarget(targetId)
     },
+    replaceAnimations(newEmotes, reset = false) {
+      if (player.data.owner === world.network.id) {
+        player.replaceAnimations(newEmotes, reset)
+      }
+    },
   }
 }
