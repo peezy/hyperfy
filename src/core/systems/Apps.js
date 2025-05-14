@@ -213,6 +213,20 @@ export class Apps extends System {
           }
         })
       },
+      setPlayerLockable(entity, playerId, lockable = true) {
+        if (!world.network.isServer) return
+        const player = world.entities.getPlayer(playerId)
+        if (!player) return
+        
+        // Set lockable property directly on the player
+        player.lockable = lockable
+        
+        // Send the update to clients
+        world.network.send('entityModified', {
+          id: player.data.id,
+          lockable
+        })
+      },
     }
   }
 
@@ -241,6 +255,9 @@ export class Apps extends System {
       keepActive(entity) {
         return entity.keepActive
       },
+      lockable(entity) {
+        return entity.lockable
+      },
     }
     this.appSetters = {
       state(entity, value) {
@@ -248,6 +265,13 @@ export class Apps extends System {
       },
       keepActive(entity, value) {
         entity.keepActive = value
+      },
+      lockable(entity, value) {
+        entity.lockable = value
+        world.network.send('entityModified', {
+          id: entity.data.id,
+          lockable: value
+        })
       },
     }
     this.appMethods = {
@@ -315,6 +339,13 @@ export class Apps extends System {
           }
         }
         entity.onFields?.(entity.fields)
+      },
+      setLockable(entity, lockable = true) {
+        entity.lockable = lockable
+        world.network.send('entityModified', {
+          id: entity.data.id,
+          lockable
+        })
       },
     }
   }
