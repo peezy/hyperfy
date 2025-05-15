@@ -54,6 +54,9 @@ export function createPlayerProxy(entity, player) {
     get destroyed() {
       return !!player.destroyed
     },
+    get lockable() {
+      return player.lockable
+    },
     teleport(position, rotationY) {
       if (player.data.owner === world.network.id) {
         // if player is local we can set directly
@@ -163,6 +166,34 @@ export function createPlayerProxy(entity, player) {
         return console.error('screenshare can only be called on local player')
       }
       world.livekit.setScreenShareTarget(targetId)
+    },
+    replaceAnimations(newEmotes, reset = false) {
+      if (player.data.owner === world.network.id) {
+        player.replaceAnimations(newEmotes, reset)
+      }
+    },
+    setLockable(lockable = true) {
+      // if (world.network.isServer) {
+        player.setLockable(lockable)
+      // }
+    },
+    setDoubleJumpEnabled(enabled) {
+      if (player.data.owner === world.network.id) {
+        player.setDoubleJumpEnabled(enabled)
+      }
+    },
+    isInAir() {
+      return player.isInAir()
+    },
+    setZoom(zoomValue) {
+      if (player.data.owner === world.network.id) {
+        player.setZoom(zoomValue)
+      }
+    },
+    setZoomEnabled(enabled) {
+      if (player.data.owner === world.network.id) {
+        player.setZoomEnabled(enabled)
+      }
     },
   }
 }
