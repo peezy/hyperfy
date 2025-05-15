@@ -35,6 +35,7 @@ import {
   FieldNumber,
   FieldRange,
   FieldSwitch,
+  FieldSwitchOrEdit,
   FieldText,
   FieldTextarea,
   FieldToggle,
@@ -597,6 +598,10 @@ function World({ world, hidden }) {
   const [avatar, setAvatar] = useState(world.settings.avatar)
   const [playerLimit, setPlayerLimit] = useState(world.settings.playerLimit)
   const [publicc, setPublic] = useState(world.settings.public)
+  const [llmProvider, setLLMProvider] = useState(world.settings.llmProvider)
+  const [llmProviders, setLLMProviders] = useState(world.settings.llmProviders || [])
+  const [llmModel, setLLMModel] = useState(world.settings.llmModel || '')
+
   useEffect(() => {
     const onChange = changes => {
       if (changes.title) setTitle(changes.title.value)
@@ -606,12 +611,39 @@ function World({ world, hidden }) {
       if (changes.avatar) setAvatar(changes.avatar.value)
       if (changes.playerLimit) setPlayerLimit(changes.playerLimit.value)
       if (changes.public) setPublic(changes.public.value)
+      if (changes.llmProvider) setLLMProvider(changes.llmProvider.value)
+      if (changes.llmProviders) setLLMProviders(changes.llmProviders.value)
+      if (changes.llmModel) setLLMModel(changes.llmModel.value)
     }
     world.settings.on('change', onChange)
     return () => {
       world.settings.off('change', onChange)
     }
   }, [])
+
+  // Convert providers array to options format expected by FieldSwitch
+  const llmProviderOptions = useMemo(
+    () =>
+      llmProviders.map(provider => ({
+        label: provider.label,
+        value: provider.id,
+      })),
+    [llmProviders]
+  )
+
+  // Get the current provider's suggested models
+  const currentProvider = useMemo(() => llmProviders.find(p => p.id === llmProvider), [llmProvider, llmProviders])
+
+  // Create model options from current provider's available models
+  const modelOptions = useMemo(() => {
+    if (!currentProvider || !currentProvider.availableModels) return []
+
+    return currentProvider.availableModels.map(modelId => ({
+      label: modelId,
+      value: modelId,
+    }))
+  }, [currentProvider])
+
   return (
     <Pane hidden={hidden}>
       <div
@@ -691,12 +723,32 @@ function World({ world, hidden }) {
             onChange={value => world.settings.set('playerLimit', value, true)}
           />
           {isAdmin && (
-            <FieldToggle
-              label='Public'
-              hint='Allow everyone to build (and destroy) things in the world. When disabled only admins can build.'
-              value={publicc}
-              onChange={value => world.settings.set('public', value, true)}
-            />
+            <>
+              <FieldToggle
+                label='Public'
+                hint='Allow everyone to build (and destroy) things in the world. When disabled only admins can build.'
+                value={publicc}
+                onChange={value => world.settings.set('public', value, true)}
+              />
+              {llmProviderOptions.length > 0 && (
+                <>
+                  <FieldSwitch
+                    label='AI Provider'
+                    hint='Choose the LLM provider for this world'
+                    options={llmProviderOptions}
+                    value={llmProvider}
+                    onChange={value => world.settings.set('llmProvider', value, true)}
+                  />
+                  <FieldSwitchOrEdit
+                    label='AI Model'
+                    hint='Choose or specify a model for the selected AI provider'
+                    options={modelOptions}
+                    value={llmModel}
+                    onChange={value => world.settings.set('llmModel', value, true)}
+                  />
+                </>
+              )}
+            </>
           )}
           {/* <FieldBtn
           label='Set Spawn'
@@ -1625,3 +1677,6 @@ function Meta({ world, hidden }) {
     </Pane>
   )
 }
+
+// Export these components so they can be reused by mods
+export { Section, Btn, Content, Pane, Hint, Group }
