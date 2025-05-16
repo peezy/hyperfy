@@ -820,7 +820,7 @@ export class PlayerLocal extends Entity {
       this.running = this.moving && this.moveDir.length() > 0.9
     } else {
       // or keyboard shift key
-      this.running =  true// this.moving && (this.control.shiftLeft.down || this.control.shiftRight.down)
+      this.running = this.moving && (this.control.shiftLeft.down || this.control.shiftRight.down)
     }
 
     // normalize direction (also prevents surfing)
@@ -864,13 +864,47 @@ export class PlayerLocal extends Entity {
     else if (this.targetLockOn && this.lockedTarget) {
       this.faceLockedTarget(delta)
     }
-    // if we're moving continually rotate ourselves toward the direction we are moving
+    // Handle movement rotation - when moving
     else if (this.moving) {
-      const alpha = 1 - Math.pow(0.00000001, delta)
-      q1.setFromUnitVectors(FORWARD, this.moveDir)
-      this.base.quaternion.slerp(q1, alpha)
+      // Get reference direction based on camera
+      const cameraForward = v1.set(0, 0, -1).applyQuaternion(this.cam.quaternion);
+      cameraForward.y = 0;
+      cameraForward.normalize();
+      
+      // Project movement onto camera's forward/backward axis
+      const forwardDot = this.moveDir.dot(cameraForward);
+      
+      // Calculate camera's right vector
+      const cameraRight = v3.crossVectors(cameraForward, UP).normalize();
+      
+      // Project movement onto camera's left/right axis
+      const rightDot = this.moveDir.dot(cameraRight);
+      
+      const alpha = 1 - Math.pow(0.00000001, delta);
+      
+      // For pure strafing (very little forward/backward component), face the camera
+      if (Math.abs(forwardDot) < 0.2 && Math.abs(rightDot) > 0.7) {
+        // Face the camera when purely strafing
+        e1.set(0, this.cam.rotation.y, 0);
+        q1.setFromEuler(e1);
+        this.base.quaternion.slerp(q1, alpha);
+      }
+      // For all other movement (including diagonal forward and backward), rotate to face movement direction
+      else {
+        // When moving forward or diagonally (including diagonal backward), rotate to face the direction
+        if (forwardDot < 0) {
+          // For backward movement, rotate 180 degrees to face the backward direction
+          // This way we'll still use backward animation but with proper orientation
+          const reversedDir = v4.copy(this.moveDir).multiplyScalar(-1);
+          q1.setFromUnitVectors(FORWARD, reversedDir);
+        } else {
+          // For forward movement, directly face the direction
+          q1.setFromUnitVectors(FORWARD, this.moveDir);
+        }
+        this.base.quaternion.slerp(q1, alpha);
+      }
     }
-
+    
     // emote
     let emote
     if (this.data.effect?.emote) {
@@ -886,45 +920,64 @@ export class PlayerLocal extends Entity {
     } else if (this.speaking) {
       emote = this.emotes.TALK
     } else if (this.moving) {
+      // Get reference direction - either toward target when locked on, or camera forward when not
+      let referenceDir;
+      
+      // Get the movement direction in world space
+      const worldMoveDir = v2.copy(this.moveDir);
+      
       if (this.targetLockOn && this.lockedTarget) {
-        // Get the direction to target in world space
-        const toTarget = v1.copy(this.lockedTarget.targetPosition).sub(this.base.position)
-        toTarget.y = 0
-        toTarget.normalize()
-
-        // Get the movement direction in world space
-        const worldMoveDir = v2.copy(this.moveDir)
-
-        // Project movement onto target direction to determine if moving forward/backward
-        const forwardDot = worldMoveDir.dot(toTarget)
-
-        // Get right vector relative to target direction
-        const rightVector = v3.crossVectors(toTarget, UP).normalize()
-
-        // Project movement onto right vector to determine if strafing
-        const rightDot = worldMoveDir.dot(rightVector)
-
-        // Determine movement type based on projections
-        if (Math.abs(rightDot) > Math.abs(forwardDot)) {
-          // Strafing dominates the movement
-          if (rightDot > 0) {
-            // Strafing right
-            emote = this.running ? this.emotes.RUN_STRAFE_RIGHT : this.emotes.STRAFE_RIGHT
-          } else {
-            // Strafing left
-            emote = this.running ? this.emotes.RUN_STRAFE_LEFT : this.emotes.STRAFE_LEFT
-          }
-        } else if (forwardDot < -0.5) {
-          // Moving backward
-          emote = this.running ? this.emotes.RUN_BACKWARD : this.emotes.WALK_BACKWARD
-        } else {
-          // Moving forward or slight angles
-          emote = this.running ? this.emotes.RUN : this.emotes.WALK
-        }
+        // Use direction to locked target as reference
+        referenceDir = v1.copy(this.lockedTarget.targetPosition).sub(this.base.position);
+        referenceDir.y = 0;
+        referenceDir.normalize();
       } else {
-        emote = this.running ? this.emotes.RUN : this.emotes.WALK
+        // Use camera forward direction as reference when no target is locked
+        referenceDir = v1.set(0, 0, -1).applyQuaternion(this.cam.quaternion);
+        referenceDir.y = 0;
+        referenceDir.normalize();
+      }
+
+      // Project movement onto reference direction to determine if moving forward/backward
+      const forwardDot = worldMoveDir.dot(referenceDir);
+
+      // Get right vector relative to reference direction
+      const rightVector = v3.crossVectors(referenceDir, UP).normalize();
+
+      // Project movement onto right vector to determine if strafing
+      const rightDot = worldMoveDir.dot(rightVector);
+
+      // Determine movement type based on projections
+      // Apply a bias to favor forward/backward over strafing for diagonal movement
+      const forwardBias = 1.3; // Bias factor to prioritize forward/backward movement
+      
+      if (Math.abs(forwardDot) > 0.5) {
+        // When forward/backward component is significant, prioritize it
+        if (forwardDot < 0) {
+          // Moving backward
+          emote = this.running ? this.emotes.RUN_BACKWARD : this.emotes.WALK_BACKWARD;
+        } else {
+          // Moving forward
+          emote = this.running ? this.emotes.RUN : this.emotes.WALK;
+        }
+      } else if (Math.abs(rightDot) > Math.abs(forwardDot) * forwardBias) {
+        // Only use strafing when the sideways component is significantly stronger
+        if (rightDot > 0) {
+          // Strafing right
+          emote = this.running ? this.emotes.RUN_STRAFE_RIGHT : this.emotes.STRAFE_RIGHT;
+        } else {
+          // Strafing left
+          emote = this.running ? this.emotes.RUN_STRAFE_LEFT : this.emotes.STRAFE_LEFT;
+        }
+      } else if (forwardDot < 0) {
+        // Slight backward diagonal movement
+        emote = this.running ? this.emotes.RUN_BACKWARD : this.emotes.WALK_BACKWARD;
+      } else {
+        // Slight forward diagonal movement
+        emote = this.running ? this.emotes.RUN : this.emotes.WALK;
       }
     }
+    
     if (!emote) emote = this.emotes.IDLE
     let emoteChanged
     if (this.emote !== emote) {
