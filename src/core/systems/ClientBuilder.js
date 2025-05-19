@@ -91,6 +91,13 @@ export class ClientBuilder extends System {
       if (this.canBuild()) {
         // actions.push({ type: 'tab', label: 'Build Mode' })
       }
+      actions.push({ type: 'custom', btn: 'W A S D', label: 'Move' })
+      actions.push({ type: 'shiftLeft', label: 'Run' })
+      actions.push({ type: 'space', label: 'Jump' })
+      actions.push({ type: 'mouseLeft', label: 'Shoot' })
+      actions.push({ type: 'mouseRight', label: 'Scope' })
+      actions.push({ type: 'keyX', label: 'Exit (hold)' })
+      actions.push({ type: 'escape', label: 'Settings' })
     }
     if (this.enabled && !this.selected) {
       actions.push({ type: 'mouseLeft', label: modeLabels[this.mode] })

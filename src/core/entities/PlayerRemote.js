@@ -17,6 +17,7 @@ export class PlayerRemote extends Entity {
   constructor(world, data, local) {
     super(world, data, local)
     this.isPlayer = true
+    this.lockable = true
     this.init()
   }
 
@@ -178,6 +179,9 @@ export class PlayerRemote extends Entity {
       this.nametag.health = data.health
       this.world.events.emit('health', { playerId: this.data.id, health: data.health })
     }
+    if (data.hasOwnProperty('lockable')) {
+      this.lockable = data.lockable
+    }
     if (data.hasOwnProperty('avatar')) {
       this.data.avatar = data.avatar
       avatarChanged = true
@@ -222,5 +226,14 @@ export class PlayerRemote extends Entity {
     if (local) {
       this.world.network.send('entityRemoved', this.data.id)
     }
+  }
+
+  setLockable(lockable = true) {
+    console.log('setLockable', lockable)
+    this.lockable = lockable
+    this.world.network.send('entityModified', {
+      id: this.data.id,
+      lockable,
+    })
   }
 }
