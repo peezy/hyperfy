@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { css } from '@firebolt-dev/css'
-import { hashFile } from '../../core/utils-client'
+// import { hashFile } from '../../core/utils-client' // hashFile is no longer needed for filename
 
 // editor will remember a single script so you can flip between tabs without hitting save (eg viewing docs)
 const cached = {
@@ -21,19 +21,27 @@ export function ScriptEditor({ app, onHandle }) {
     const code = codeRef.current
     // convert to file
     const blob = new Blob([code], { type: 'text/plain' })
-    const file = new File([blob], 'script.js', { type: 'text/plain' })
-    // immutable hash the file
-    const hash = await hashFile(file)
-    // use hash as glb filename
-    const filename = `${hash}.js`
-    // canonical url to this file
-    const url = `asset://${filename}`
-    // cache file locally so this client can insta-load it
-    world.loader.insert('script', url, file)
-    // update blueprint locally (also rebuilds apps)
+
+    // Determine new version for the blueprint
     const version = blueprint.version + 1
-    world.blueprints.modify({ id: blueprint.id, version, script: url })
-    // upload script
+
+    // Use blueprint ID for a stable base filename
+    const baseFilename = `script-${blueprint.id}.js`
+    // Create the File object with the stable base filename
+    const file = new File([blob], baseFilename, { type: 'text/plain' })
+
+    // Use base filename + version query param for the canonical URL (for cache busting)
+    const url = `asset://${baseFilename}?v=${version}`
+
+    // hashFile is no longer used for the filename
+    // const hash = await hashFile(file)
+    // const filename = `${hash}.js` // Old way
+
+    // cache file locally so this client can insta-load it
+    world.loader.insert('script', url, file) // Use the versioned URL as the cache key
+    // update blueprint locally (also rebuilds apps)
+    world.blueprints.modify({ id: blueprint.id, version: version, script: url })
+    // upload script (server receives file named baseFilename, e.g., "script-blueprintId.js")
     await world.network.upload(file)
     // broadcast blueprint change to server + other clients
     world.network.send('blueprintModified', { id: blueprint.id, version, script: url })
