@@ -108,6 +108,26 @@ export function ScriptEditor({ app, onHandle }) {
     }
   }, [])
 
+  useEffect(() => {
+    const handleBuild = (id) => {
+      if(app.data?.id !== id) return
+      if (editor) {
+        const newCode = app.script.code
+        const model = editor.getModel()
+        if (model && model.getValue() !== newCode) {
+          model.setValue(newCode)
+        }
+        codeRef.current = newCode
+      }
+    }
+    // app.on('build', handleBuild)
+    app.world.events.on('appBuilt', handleBuild)
+
+    return () => {
+      app.world.events.off('appBuilt', handleBuild)
+    }
+  }, [editor])
+
   return (
     <div
       className='editor'

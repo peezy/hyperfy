@@ -40,11 +40,11 @@ export class AssetWatcher extends System {
       },
     })
 
-    console.log(`[AssetWatcher] Watching for script changes in: ${this.world.assetsDir}`)
+    // console.log(`[AssetWatcher] Watching for script changes in: ${this.world.assetsDir}`)
 
     // list all js files in the assets directory
     const jsFiles = (await fs.readdir(this.world.assetsDir)).filter(file => file.endsWith('.js'))
-    console.log(`[AssetWatcher] Found ${jsFiles.length} script files in ${this.world.assetsDir}`)
+    // console.log(`[AssetWatcher] Found ${jsFiles.length} script files in ${this.world.assetsDir}`)
 
     this.watcher
       .on('change', debounce(filePath => this.handleFileChange(filePath), 500))
@@ -54,7 +54,7 @@ export class AssetWatcher extends System {
 
   handleFileChange(filePath) {
     const filename = path.basename(filePath)
-    console.log(`[AssetWatcher] File changed: ${filename}`)
+    // console.log(`[AssetWatcher] File changed: ${filename}`)
 
     if (!filename.startsWith('script-') || !filename.endsWith('.js')) {
       // Not a script file we manage this way
@@ -79,9 +79,9 @@ export class AssetWatcher extends System {
     const baseFilename = `script-${blueprintId}.js` // The actual filename on disk
     const newScriptUrlInBlueprint = `asset://${baseFilename}?v=${newVersion}`
 
-    console.log(
-      `[AssetWatcher] Updating blueprint ${blueprintId} ('${blueprint.name || 'Unnamed'}') to version ${newVersion} due to change in ${filename}`,
-    )
+    // console.log(
+    //   `[AssetWatcher] Updating blueprint ${blueprintId} ('${blueprint.name || 'Unnamed'}') to version ${newVersion} due to change in ${filename}`,
+    // )
 
     // Modify the blueprint. This will trigger app rebuilds on the server.
     this.world.blueprints.modify({
@@ -101,7 +101,7 @@ export class AssetWatcher extends System {
   destroy() {
     if (this.watcher) {
       this.watcher.close()
-      console.log('[AssetWatcher] Stopped watching asset files.')
+      // console.log('[AssetWatcher] Stopped watching asset files.')
     }
   }
 } 
