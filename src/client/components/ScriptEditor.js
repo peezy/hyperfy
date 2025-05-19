@@ -17,34 +17,33 @@ export function ScriptEditor({ app, onHandle }) {
   const [editor, setEditor] = useState(null)
   const save = async () => {
     const world = app.world
-    const blueprint = app.blueprint
+    const blueprint = app.blueprint // Current blueprint, version not incremented by client here
     const code = codeRef.current
-    // convert to file
+
+    // Convert to file
     const blob = new Blob([code], { type: 'text/plain' })
-
-    // Determine new version for the blueprint
-    const version = blueprint.version + 1
-
     // Use blueprint ID for a stable base filename
     const baseFilename = `script-${blueprint.id}.js`
     // Create the File object with the stable base filename
     const file = new File([blob], baseFilename, { type: 'text/plain' })
 
-    // Use base filename + version query param for the canonical URL (for cache busting)
-    const url = `asset://${baseFilename}?v=${version}`
+    // Upload script (server receives file named baseFilename, e.g., "script-blueprintId.js")
+    // The AssetWatcher on the server will detect this change, version the blueprint,
+    // update the script URL with a new version parameter, and broadcast 'blueprintModified'.
+    try {
+      await world.network.upload(file)
+      // Optional: provide some UI feedback that save initiated, actual update comes from server
+      console.log('[ScriptEditor] Script uploaded. Waiting for server to process and broadcast update.')
+    } catch (error) {
+      console.error('[ScriptEditor] Error uploading script:', error)
+      // Optional: provide error feedback to the user
+    }
 
-    // hashFile is no longer used for the filename
-    // const hash = await hashFile(file)
-    // const filename = `${hash}.js` // Old way
-
-    // cache file locally so this client can insta-load it
-    world.loader.insert('script', url, file) // Use the versioned URL as the cache key
-    // update blueprint locally (also rebuilds apps)
-    world.blueprints.modify({ id: blueprint.id, version: version, script: url })
-    // upload script (server receives file named baseFilename, e.g., "script-blueprintId.js")
-    await world.network.upload(file)
-    // broadcast blueprint change to server + other clients
-    world.network.send('blueprintModified', { id: blueprint.id, version, script: url })
+    // NO local version increment of blueprint.
+    // NO local world.blueprints.modify call.
+    // NO local world.network.send('blueprintModified') call.
+    // NO world.loader.insert() with a client-guessed versioned URL.
+    // All these actions are now handled authoritatively by the server via AssetWatcher.
   }
   const saveState = () => {
     if (editor) {
