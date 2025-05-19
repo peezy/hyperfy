@@ -5,6 +5,7 @@ import { ServerLiveKit } from './systems/ServerLiveKit'
 import { ServerNetwork } from './systems/ServerNetwork'
 import { ServerLoader } from './systems/ServerLoader'
 import { ServerEnvironment } from './systems/ServerEnvironment'
+import { AssetWatcher } from './systems/AssetWatcher'
 
 export function createServerWorld() {
   const world = new World()
@@ -13,5 +14,6 @@ export function createServerWorld() {
   world.register('network', ServerNetwork)
   world.register('loader', ServerLoader)
   world.register('environment', ServerEnvironment)
+  world.register('assetWatcher', AssetWatcher)
   return world
 }
