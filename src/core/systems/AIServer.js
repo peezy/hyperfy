@@ -124,16 +124,16 @@ export class AIServer extends System {
             // Use the provider from settings if set and available, otherwise use first available
             const settingsProvider = this.world.settings.llmProvider;
             const initialProvider = availableProviders.find(p => p.id === settingsProvider)
-              ? settingsProvider 
+              ? settingsProvider
               : availableProviders[0].id;
-            
+
             this.llmClient.selectProvider(initialProvider);
             debugLog(`[AIServer] Using ${initialProvider} as initial provider`);
 
             // Set the initial model if not already set
             const currentModel = this.world.settings.llmModel;
             const selectedProvider = availableProviders.find(p => p.id === initialProvider);
-            
+
             if (!currentModel && selectedProvider) {
               this.world.settings.set('llmModel', selectedProvider.defaultModel, true);
               debugLog(`[AIServer] Set initial model to ${selectedProvider.defaultModel}`);
@@ -142,13 +142,12 @@ export class AIServer extends System {
             // Update settings to reflect available provider if current one isn't available
             if (settingsProvider !== initialProvider) {
               this.world.settings.set('llmProvider', initialProvider, true);
-              
+
               // Also update the model to match the new provider
               this.world.settings.set('llmModel', selectedProvider.defaultModel, true);
             }
 
-            // this.world.network.saveSettings();
-            
+
             // Listen for provider changes in settings
             this.world.settings.on('change', changes => {
               if (changes.llmProvider && changes.llmProvider.value) {
@@ -157,7 +156,7 @@ export class AIServer extends System {
                   try {
                     this.llmClient.selectProvider(newProvider);
                     debugLog(`[AIServer] Switched LLM provider to ${newProvider}`);
-                    
+
                     // When provider changes, check if we need to update the model
                     const newProviderInfo = availableProviders.find(p => p.id === newProvider);
                     if (newProviderInfo) {
@@ -178,7 +177,7 @@ export class AIServer extends System {
                   this.world.settings.set('llmProvider', initialProvider, true);
                 }
               }
-              
+
               // Listen for model changes to update the provider config
               if (changes.llmModel && changes.llmModel.value) {
                 const model = changes.llmModel.value;
@@ -200,14 +199,13 @@ export class AIServer extends System {
             this.world.settings.set('llmProvider', null, true);
             this.world.settings.set('llmProviders', [], true);
             this.world.settings.set('llmModel', null, true);
-            // this.world.network.saveSettings();
           }
+          this.world.network.saveSettings();
         }
       } else {
         debugLog('[MCP] No MCP server provided')
       }
 
-      // Register a demo greeting tool if we have a server
       if (this.mcp) {
 
         registerBuilderTools(this.world, this.mcp)
@@ -236,7 +234,7 @@ export class AIServer extends System {
           // Use the current provider
           const providerKey = this.world.settings.llmProvider || 'openai';
           const model = this.world.settings.llmModel;
-          
+
           try {
             this.llmClient.selectProvider(providerKey);
             debugLog(`[AIServer] App prompt using provider '${providerKey}'${model ? ` and model '${model}'` : ''}`);
@@ -274,11 +272,11 @@ export class AIServer extends System {
         console.error(`[AIServer] No player found for socket`)
         return { success: false, error: 'Player not found' }
       }
-      
+
       // Check if player has permission
       if (!this.world.network.isAdmin(player) && !this.world.settings.public) {
         console.error(`[AIServer] Player ${player.data.id} not authorized`)
-        
+
         // Send error event directly to this player
         this.world.network.sendTo(socket.id, 'llmEvent', {
           type: 'error',
@@ -287,22 +285,22 @@ export class AIServer extends System {
             userId: player.data.id
           }
         })
-        
+
         return { success: false, error: 'Unauthorized' }
       }
-      
+
       debugLog(`[AIServer] Processing query for player ${player.data.id}: ${data.query}`)
-      
+
       // Check if we should continue conversation or start fresh
       const continueConversation = data.continueConversation !== false;
-      
+
       // Start the LLM stream for this player
       const success = await this.onLLMStreamStartRequest(player, data.query, continueConversation)
-      
+
       return { success }
     } catch (error) {
       console.error('[AIServer] Error processing query:', error)
-      
+
       // Send error event if we have a socket
       if (socket) {
         this.world.network.sendTo(socket.id, 'llmEvent', {
@@ -313,11 +311,11 @@ export class AIServer extends System {
           }
         })
       }
-      
+
       return { success: false, error: error.message || 'Unknown error' }
     }
   }
-  
+
   /**
    * Handle a stream cancellation request
    * @param {Object} data - The cancellation data
@@ -333,10 +331,10 @@ export class AIServer extends System {
 
       const playerId = player.data.id
       debugLog(`[AIServer] Cancelling stream for player ${playerId}`)
-      
+
       // Cancel the stream for this player
       const success = this.cancelLLMStream(playerId)
-      
+
       return { success }
     } catch (error) {
       console.error('[AIServer] Error cancelling stream:', error)
@@ -356,22 +354,22 @@ export class AIServer extends System {
       console.error('[LLM] Invalid player or query for stream request')
       return false
     }
-    
+
     if (!this.llmClient) {
       console.error('[LLM] No LLM client available')
-      this.world.network.sendTo(player.data.id, 'llmEvent', { 
-        type: 'error', 
-        data: { 
+      this.world.network.sendTo(player.data.id, 'llmEvent', {
+        type: 'error',
+        data: {
           error: 'LLM service unavailable',
-          userId: player.data.id 
-        } 
+          userId: player.data.id
+        }
       })
       return false
     }
-    
+
     const userId = player.data.id
     debugLog(`[LLM] Starting stream for player ${userId} with query: ${query}, continueConversation: ${continueConversation}`)
-    
+
     // Select the provider based on current settings before every prompt
     const providerKey = this.world.settings.llmProvider || 'openai';
     const model = this.world.settings.llmModel;
@@ -379,18 +377,18 @@ export class AIServer extends System {
     try {
       this.llmClient.selectProvider(providerKey);
       debugLog(`Selected LLM provider '${providerKey}' for this prompt.`);
-      
+
       if (model) {
         debugLog(`Using model '${model}' for this prompt.`);
       }
     } catch (e) {
       console.warn(`[AIServer] Tried to select unknown LLM provider: ${providerKey}`);
     }
-    
+
     // Check if the player already has an active stream
     if (this.activeStreams.has(userId)) {
       debugLog(`[LLM] Player ${userId} already has an active stream, ending previous one`)
-      
+
       // Send completion event for the previous stream
       this.world.network.sendTo(userId, 'llmEvent', {
         type: 'complete',
@@ -400,83 +398,83 @@ export class AIServer extends System {
         }
       })
     }
-    
+
     // Track this stream as active
     this.activeStreams.set(userId, {
       startTime: Date.now(),
       query,
       continueConversation
     })
-    
+
     // Set up event handlers for this player
     const eventHandlers = {
       onStart: (data) => {
         if (data.userId === userId || !data.userId) {
-          this.onLLMChatEvent({ 
-            type: 'start', 
-            data: { 
-              ...data, 
-              continueConversation 
-            } 
+          this.onLLMChatEvent({
+            type: 'start',
+            data: {
+              ...data,
+              continueConversation
+            }
           }, player)
         }
       },
-      
+
       onStatus: (data) => {
         if (data.userId === userId || !data.userId) {
           this.onLLMChatEvent({ type: 'status', data }, player)
         }
       },
-      
+
       onText: (data) => {
         if (data.userId === userId || !data.userId) {
           this.onLLMChatEvent({ type: 'text', data }, player)
         }
       },
-      
+
       onToolStart: (data) => {
         if (data.userId === userId || !data.userId) {
           this.onLLMChatEvent({ type: 'tool_start', data }, player)
         }
       },
-      
+
       onToolResult: (data) => {
         if (data.userId === userId || !data.userId) {
           this.onLLMChatEvent({ type: 'tool_result', data }, player)
         }
       },
-      
+
       onToolError: (data) => {
         if (data.userId === userId || !data.userId) {
           this.onLLMChatEvent({ type: 'tool_error', data }, player)
         }
       },
-      
+
       onComplete: (data) => {
         if (data.userId === userId || !data.userId) {
           this.onLLMChatEvent({ type: 'complete', data }, player)
-          
+
           // Remove this stream from active streams
           this.activeStreams.delete(userId)
-          
+
           // Remove all event listeners
           this.removeEventListeners(this.llmClient, eventHandlers)
         }
       },
-      
+
       onError: (data) => {
         if (data.userId === userId || !data.userId) {
           this.onLLMChatEvent({ type: 'error', data }, player)
-          
+
           // Remove this stream from active streams
           this.activeStreams.delete(userId)
-          
+
           // Remove all event listeners
           this.removeEventListeners(this.llmClient, eventHandlers)
         }
       }
     }
-    
+
     // Add all event listeners
     this.llmClient.on('start', eventHandlers.onStart)
     this.llmClient.on('status', eventHandlers.onStatus)
@@ -486,40 +484,40 @@ export class AIServer extends System {
     this.llmClient.on('tool_error', eventHandlers.onToolError)
     this.llmClient.on('complete', eventHandlers.onComplete)
     this.llmClient.on('error', eventHandlers.onError)
-    
+
     try {
       // Process the query
       this.world.network.sendTo(userId, 'llmEvent', {
         type: 'status',
-        data: { 
+        data: {
           status: 'Starting LLM query processing...',
           userId,
           continueConversation
         }
       })
-      
+
       // Start processing the query with the specified model if available
       await this.llmClient.processQueryStream(query, userId, undefined, undefined, continueConversation);
       return true
     } catch (error) {
       console.error(`[LLM] Error processing query stream for ${userId}:`, error)
-      
+
       // Send error to client
       this.world.network.sendTo(userId, 'llmEvent', {
         type: 'error',
-        data: { 
+        data: {
           error: error.message || 'Error processing query',
-          userId 
+          userId
         }
       })
-      
+
       // Clean up
       this.activeStreams.delete(userId)
       this.removeEventListeners(this.llmClient, eventHandlers)
       return false
     }
   }
-  
+
   /**
    * Helper method to remove all event listeners
    * @param {Object} emitter - The event emitter
@@ -535,7 +533,7 @@ export class AIServer extends System {
     emitter.removeListener('complete', handlers.onComplete)
     emitter.removeListener('error', handlers.onError)
   }
-  
+
   /**
    * Cancels an active LLM stream for a player
    * @param {string} userId - ID of the player whose stream should be cancelled
@@ -545,9 +543,9 @@ export class AIServer extends System {
     if (!this.activeStreams.has(userId)) {
       return false
     }
-    
+
     debugLog(`[LLM] Cancelling stream for player ${userId}`)
-    
+
     // Send cancellation event
     this.world.network.sendTo(userId, 'llmEvent', {
       type: 'complete',
@@ -556,7 +554,7 @@ export class AIServer extends System {
         message: 'Stream cancelled by system'
       }
     })
-    
+
     // Remove from active streams
     this.activeStreams.delete(userId)
     return true
@@ -606,7 +604,7 @@ export class AIServer extends System {
 
       // Keep track of registered tools
       this.appTools.set(toolName, { schema, handler: wrappedHandler, entityId })
-      
+
 
       debugLog(`[MCP] Successfully registered tool '${toolName}'`)
       return true
@@ -633,14 +631,14 @@ export class AIServer extends System {
       // Remove each tool
       for (const toolName of toolsToRemove) {
         debugLog(`[MCP] Unregistering tool '${toolName}' for entity ${entityId}`)
-        
+
         // Remove from MCP server
         if (this.mcp.removeTool) {
           this.mcp.removeTool(toolName)
         } else if (this.mcp._registeredTools) {
           delete this.mcp._registeredTools[toolName]
         }
-        
+
         // Remove from our tracking
         this.appTools.delete(toolName)
       }
@@ -652,7 +650,7 @@ export class AIServer extends System {
         }
         debugLog(`[MCP] Successfully unregistered ${toolsToRemove.length} tools for entity ${entityId}`)
       }
-      
+
       return true
     } catch (err) {
       console.error(`[MCP] Failed to unregister tools for entity ${entityId}:`, err)
@@ -698,7 +696,7 @@ export class AIServer extends System {
             console.warn(`[AIServer] Failed to parse tool args as JSON, keeping as string`);
           }
         }
-        
+
         debugLog(`Sending tool_start for ${eventData.tool} with args:`, eventData.args);
         this.world.network.sendTo(player.data.id, 'llmEvent', { type: 'tool_start', data: eventData })
         break
@@ -755,23 +753,23 @@ const getDbPathForMCP = () => {
 async function saveAssetFile(content, extension) {
   // Create a buffer from the content if it's a string
   const buffer = typeof content === 'string' ? Buffer.from(content) : content
-  
+
   // Hash the buffer
   const hash = await hashFile(buffer)
-  
+
   // Use hash as filename with the proper extension
   const filename = `${hash}.${extension}`
-  
+
   // Canonical URL to this file
   const url = `asset://${filename}`
-  
+
   // Save file to assets directory
   const filePath = path.join(assetsDir, filename)
   const exists = await fs.exists(filePath)
   if (!exists) {
     await fs.writeFile(filePath, buffer)
   }
-  
+
   return { hash, url, filePath }
 }
 
@@ -837,7 +835,7 @@ async function updateBlueprintScript(world, blueprint, scriptContent) {
 // Common response formatter for consistency
 function formatResponse(data, error = null) {
   debugLog(`formatResponse: Formatting response with error=${!!error}`);
-  
+
   if (error) {
     debugLog(`formatResponse: Error details:`, error);
     const response = {
@@ -876,19 +874,19 @@ function formatResponse(data, error = null) {
 async function searchDocs(query) {
   try {
     if (!query) return []
-    
+
     // Normalize the query to lowercase for case-insensitive matching
     const normalizedQuery = query.toLowerCase()
-    
+
     // Get all markdown files in the docs directory
     const files = await fs.readdir(docsDir)
     const mdFiles = files.filter(file => file.endsWith('.md'))
-    
+
     // Check subdirectories
     const subdirs = (await fs.readdir(docsDir, { withFileTypes: true }))
       .filter(dirent => dirent.isDirectory())
       .map(dirent => dirent.name)
-    
+
     // Gather all markdown files from subdirectories
     for (const subdir of subdirs) {
       try {
@@ -901,18 +899,18 @@ async function searchDocs(query) {
         console.error(`Error reading subdir ${subdir}:`, err)
       }
     }
-    
+
     // Read each file and check for matches
     const results = []
-    
+
     for (const file of mdFiles) {
       try {
         const filePath = path.join(docsDir, file)
         const content = await fs.readFile(filePath, 'utf8')
-        
+
         // Count how many times the query appears in the content
         const matchCount = (content.toLowerCase().match(new RegExp(normalizedQuery, 'g')) || []).length
-        
+
         // If there are matches, add to results
         if (matchCount > 0) {
           results.push({
@@ -925,7 +923,7 @@ async function searchDocs(query) {
         console.error(`Error reading file ${file}:`, err)
       }
     }
-    
+
     // Sort by relevance (match count)
     return results.sort((a, b) => b.matchCount - a.matchCount)
   } catch (err) {
@@ -988,14 +986,14 @@ function findScriptingRulesFile() {
     path.join(docsDir, 'scripting-rules.md'),
     path.join(repoRootDir, 'docs/scripting-rules.md')
   ];
-  
+
   for (const filePath of possiblePaths) {
     if (fs.existsSync(filePath)) {
       debugLog(`Found scripting rules at: ${filePath}`);
       return filePath;
     }
   }
-  
+
   console.error("Could not find scripting-rules.md in any expected location");
   return null;
 }
@@ -1004,7 +1002,7 @@ export function registerBuilderTools(world, mcpServer) {
   // Register the scripting rules as a static resource
   debugLog(`Registering scripting rules resource from path: ${scriptingRulesPath}`)
   const scriptingRulesFilePath = findScriptingRulesFile();
-  
+
   if (scriptingRulesFilePath) {
     mcpServer.resource(
       "scripting-rules",
@@ -1282,7 +1280,7 @@ export function registerBuilderTools(world, mcpServer) {
 
         debugLog(`get-app-scripts: Built ${conditions.length} search conditions with ${params.length} parameters`);
 
-        const whereClause = conditions.length > 0 
+        const whereClause = conditions.length > 0
           ? 'WHERE ' + conditions.join(' AND ')
           : '';
 
@@ -1323,19 +1321,19 @@ export function registerBuilderTools(world, mcpServer) {
         debugLog(`get-app-scripts: Executing query`);
         const results = db.prepare(query).all(...params);
         debugLog(`get-app-scripts: Found ${results.length} results`);
-        
+
         if (!results || results.length === 0) {
           debugLog(`get-app-scripts: No results found`);
-          return formatResponse({ 
+          return formatResponse({
             message: 'No apps found matching the search criteria',
-            searchQuery 
+            searchQuery
           });
         }
 
         debugLog(`get-app-scripts: Processing results`);
         const processedResults = await Promise.all(results.map(async (result) => {
           try {
-            const blueprintData = typeof result.blueprintData === 'string' 
+            const blueprintData = typeof result.blueprintData === 'string'
               ? JSON.parse(result.blueprintData)
               : result.blueprintData;
 
@@ -1351,16 +1349,16 @@ export function registerBuilderTools(world, mcpServer) {
                 const filename = scriptUrl.replace('asset://', '');
                 const scriptPath = path.join(assetsDir, filename);
                 debugLog(`get-app-scripts: Reading script for blueprint ${blueprintData.id} from ${scriptPath}`);
-                
+
                 if (await fs.exists(scriptPath)) {
                   const scriptContent = await fs.readFile(scriptPath, 'utf8');
-                  
+
                   // Filter by script content if requested
                   if (searchQuery.scriptContains && !scriptContent.includes(searchQuery.scriptContains)) {
                     debugLog(`get-app-scripts: Script content filter did not match for ${blueprintData.id}`);
                     return null;
                   }
-                  
+
                   response.script = scriptContent;
                 } else {
                   debugLog(`get-app-scripts: Script file not found for ${blueprintData.id}`);
@@ -1385,7 +1383,7 @@ export function registerBuilderTools(world, mcpServer) {
         // Filter out null results (from script content filtering)
         const filteredResults = processedResults.filter(r => r !== null);
         debugLog(`get-app-scripts: Returning ${filteredResults.length} processed results`);
-        
+
         return formatResponse(filteredResults);
       } catch (err) {
         console.error(`[ERROR] get-app-scripts: Failed with error:`, err);
@@ -1458,7 +1456,7 @@ export function registerBuilderTools(world, mcpServer) {
 
         const processedResults = await Promise.all(results.map(async (result) => {
           try {
-            const blueprintData = typeof result.blueprintData === 'string' 
+            const blueprintData = typeof result.blueprintData === 'string'
               ? JSON.parse(result.blueprintData)
               : result.blueprintData;
 
@@ -1478,7 +1476,7 @@ export function registerBuilderTools(world, mcpServer) {
             }
 
             const script = await fs.readFile(scriptPath, 'utf8');
-            
+
             // Filter by script content if requested
             if (scriptContent && !script.includes(scriptContent)) {
               debugLog(`[DEBUG] find-app-script-usage: Script content filter did not match for ${blueprintData.id}`);
@@ -1523,11 +1521,11 @@ export function registerBuilderTools(world, mcpServer) {
       try {
         const results = await searchDocs(query)
         debugLog(`[DEBUG] search-docs: Found ${results.length} total matches`);
-        
+
         // Limit the number of results
         const limitedResults = results.slice(0, limit)
         debugLog(`[DEBUG] search-docs: Returning ${limitedResults.length} results after limit`);
-        
+
         return {
           content: [
             {
@@ -1578,12 +1576,12 @@ export function registerBuilderTools(world, mcpServer) {
         const pos = position || [0, 0, 0]
         const rot = quaternion || [0, 0, 0, 1]
         debugLog(`[DEBUG] create-entity: Using position=${pos}, rotation=${rot}`);
-        
+
         // Create the entity
         debugLog(`[DEBUG] create-entity: Creating entity with creatorId=${creatorId}`);
         const entity = await createEntity(world, blueprintId, pos, rot, creatorId)
         debugLog(`[DEBUG] create-entity: Entity created successfully with id=${entity.data.id}`);
-        
+
         return {
           content: [
             {
