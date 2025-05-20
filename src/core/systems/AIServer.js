@@ -39,58 +39,32 @@ export class AIServer extends System {
 
         // Initialize and register providers only if llmManager is present
         if (this.llmManager && this.llmManager.registerProvider) {
-          const availableProviders = [];
-          const defaultModels = {
-            anthropic: 'claude-3-sonnet-20240229',
-            openai: 'gpt-4-turbo',
-            openrouter: 'openai/gpt-4o'
-          };
+          const successfullyRegisteredProviderIds = [];
+          // const defaultModels = { // This is now defined in Settings.js
+          //   anthropic: 'claude-3-sonnet-20240229',
+          //   openai: 'gpt-4-turbo',
+          //   openrouter: 'openai/gpt-4o'
+          // };
 
-          // Only register Anthropic if API key is available
+          // Register actual provider instances with llmManager
           if (process.env.ANTHROPIC_API_KEY) {
             const anthropicProvider = new AnthropicProvider({
               apiKey: process.env.ANTHROPIC_API_KEY,
             });
             this.llmManager.registerProvider('anthropic', anthropicProvider);
-            availableProviders.push({
-              id: 'anthropic',
-              label: 'Anthropic',
-              defaultModel: defaultModels.anthropic,
-              availableModels: [
-                'claude-3-opus-20240229',
-                'claude-3-sonnet-20240229',
-                'claude-3-haiku-20240307',
-                'claude-2.1',
-                'claude-2.0',
-                'claude-instant-1.2'
-              ]
-            });
-            debugLog('[AIServer] Registered Anthropic provider');
+            successfullyRegisteredProviderIds.push('anthropic');
+            debugLog('[AIServer] Registered Anthropic provider with LLMManager');
           }
 
-          // Only register OpenAI if API key is available
           if (process.env.OPENAI_API_KEY) {
             const openaiProvider = new OpenAIProvider({
               apiKey: process.env.OPENAI_API_KEY,
             });
             this.llmManager.registerProvider('openai', openaiProvider);
-            availableProviders.push({
-              id: 'openai',
-              label: 'OpenAI',
-              defaultModel: defaultModels.openai,
-              availableModels: [
-                'gpt-4-turbo',
-                'gpt-4-0125-preview',
-                'gpt-4-1106-preview',
-                'gpt-4',
-                'gpt-3.5-turbo',
-                'gpt-3.5-turbo-1106'
-              ]
-            });
-            debugLog('[AIServer] Registered OpenAI provider');
+            successfullyRegisteredProviderIds.push('openai');
+            debugLog('[AIServer] Registered OpenAI provider with LLMManager');
           }
 
-          // Only register OpenRouter if API key is available
           if (process.env.OPENROUTER_API_KEY) {
             const openRouterProvider = new OpenRouterProvider({
               apiKey: process.env.OPENROUTER_API_KEY,
@@ -98,111 +72,139 @@ export class AIServer extends System {
               siteName: 'Hyperfy'
             });
             this.llmManager.registerProvider('openrouter', openRouterProvider);
-            availableProviders.push({
-              id: 'openrouter',
-              label: 'OpenRouter',
-              defaultModel: defaultModels.openrouter,
-              availableModels: [
-                'openai/gpt-4o',
-                'openai/gpt-4-turbo',
-                'openai/gpt-4',
-                'anthropic/claude-3-opus',
-                'anthropic/claude-3-sonnet',
-                'anthropic/claude-3-haiku',
-                'meta-llama/llama-3-70b-instruct',
-                'meta-llama/llama-3-8b-instruct',
-                'google/gemini-pro'
-              ]
-            });
-            debugLog('[AIServer] Registered OpenRouter provider');
+            successfullyRegisteredProviderIds.push('openrouter');
+            debugLog('[AIServer] Registered OpenRouter provider with LLMManager');
           }
 
-          // Update settings with available providers
-          this.world.settings.set('llmProviders', availableProviders, true);
+          // availableProvidersListFromSettings is sourced from settings (populated by Settings constructor from ENV)
+          const availableProvidersListFromSettings = this.world.settings.llmProviders;
 
-          if (availableProviders.length > 0) {
-            // Use the provider from settings if set and available, otherwise use first available
-            const settingsProvider = this.world.settings.llmProvider;
-            const initialProvider = availableProviders.find(p => p.id === settingsProvider)
-              ? settingsProvider
-              : availableProviders[0].id;
+          if (availableProvidersListFromSettings.length > 0 && successfullyRegisteredProviderIds.length > 0) {
+            let persistedProviderId = this.world.settings.llmProvider; // Current value in settings (constructor default or deserialized)
+            let persistedModelId = this.world.settings.llmModel;
 
-            this.llmManager.selectProvider(initialProvider);
-            debugLog(`[AIServer] Using ${initialProvider} as initial provider`);
+            let chosenProviderId = null;
+            let chosenModelId = null;
 
-            // Set the initial model if not already set
-            const currentModel = this.world.settings.llmModel;
-            const selectedProvider = availableProviders.find(p => p.id === initialProvider);
-
-            if (!currentModel && selectedProvider) {
-              this.world.settings.set('llmModel', selectedProvider.defaultModel, true);
-              debugLog(`[AIServer] Set initial model to ${selectedProvider.defaultModel}`);
+            const persistedProviderInfo = availableProvidersListFromSettings.find(p => p.id === persistedProviderId);
+            if (persistedProviderInfo && successfullyRegisteredProviderIds.includes(persistedProviderId)) {
+              chosenProviderId = persistedProviderId;
+              if (persistedModelId && persistedProviderInfo.availableModels.includes(persistedModelId)) {
+                chosenModelId = persistedModelId;
+              } else {
+                chosenModelId = persistedProviderInfo.defaultModel;
+                this.world.settings.set('llmModel', chosenModelId, true); // Correct model in settings
+                debugLog(`[AIServer] Corrected model to ${chosenModelId} for provider ${chosenProviderId}`);
+              }
+            } else {
+              const firstValidProviderFromSettings = availableProvidersListFromSettings.find(p => successfullyRegisteredProviderIds.includes(p.id));
+              if (firstValidProviderFromSettings) {
+                chosenProviderId = firstValidProviderFromSettings.id;
+                chosenModelId = firstValidProviderFromSettings.defaultModel;
+                this.world.settings.set('llmProvider', chosenProviderId, true); // Correct provider
+                this.world.settings.set('llmModel', chosenModelId, true);   // Correct model
+                debugLog(`[AIServer] Defaulted to provider ${chosenProviderId} and model ${chosenModelId}`);
+              } else {
+                debugLog('[AIServer] No LLM providers could be successfully registered or are available in settings.');
+                this.world.settings.set('llmProvider', null, true);
+                this.world.settings.set('llmModel', null, true);
+              }
             }
 
-            // Update settings to reflect available provider if current one isn't available
-            if (settingsProvider !== initialProvider) {
-              this.world.settings.set('llmProvider', initialProvider, true);
-
-              // Also update the model to match the new provider
-              this.world.settings.set('llmModel', selectedProvider.defaultModel, true);
+            if (chosenProviderId) {
+              try {
+                this.llmManager.selectProvider(chosenProviderId);
+                debugLog(`[AIServer] Using ${chosenProviderId} as initial provider, model ${chosenModelId}`);
+              } catch (e) {
+                console.warn(`[AIServer] Failed to select provider ${chosenProviderId} in LLMManager`, e);
+                this.world.settings.set('llmProvider', null, true);
+                this.world.settings.set('llmModel', null, true);
+              }
             }
-
-
-            // Listen for provider changes in settings
-            this.world.settings.on('change', changes => {
-              if (changes.llmProvider && changes.llmProvider.value) {
-                const newProvider = changes.llmProvider.value;
-                if (availableProviders.some(p => p.id === newProvider)) {
-                  try {
-                    this.llmManager.selectProvider(newProvider);
-                    debugLog(`[AIServer] Switched LLM provider to ${newProvider}`);
-
-                    // When provider changes, check if we need to update the model
-                    const newProviderInfo = availableProviders.find(p => p.id === newProvider);
-                    if (newProviderInfo) {
-                      // Set the model to the default for this provider if the current model
-                      // is not in the list of available models for this provider
-                      const currentModel = this.world.settings.llmModel;
-                      if (!currentModel || !newProviderInfo.availableModels.includes(currentModel)) {
-                        this.world.settings.set('llmModel', newProviderInfo.defaultModel, true);
-                        debugLog(`[AIServer] Updated model to ${newProviderInfo.defaultModel} for new provider`);
-                      }
-                    }
-                  } catch (e) {
-                    console.warn(`[AIServer] Failed to switch to LLM provider: ${newProvider}`, e);
-                  }
-                } else {
-                  console.warn(`[AIServer] Tried to switch to unavailable LLM provider: ${newProvider}`);
-                  // Revert to an available provider
-                  this.world.settings.set('llmProvider', initialProvider, true);
-                }
-              }
-
-              // Listen for model changes to update the provider config
-              if (changes.llmModel && changes.llmModel.value) {
-                const model = changes.llmModel.value;
-                const provider = this.world.settings.llmProvider;
-                if (provider && model) {
-                  try {
-                    // Apply model setting to the provider here if needed
-                    // This will depend on how your LLM client implements model selection
-                    debugLog(`[AIServer] Updated LLM model to ${model} for provider ${provider}`);
-                  } catch (e) {
-                    console.warn(`[AIServer] Failed to update model: ${e.message}`);
-                  }
-                }
-              }
-            });
           } else {
-            console.warn('[AIServer] No LLM providers available - missing API keys');
-            // Clear any existing provider settings since none are available
+            console.warn('[AIServer] No LLM providers available based on ENV or none successfully registered.');
+            // this.world.settings.llmProviders is already empty or reflects ENV, set by Settings constructor
             this.world.settings.set('llmProvider', null, true);
-            this.world.settings.set('llmProviders', [], true);
             this.world.settings.set('llmModel', null, true);
           }
-          this.world.network.saveSettings();
+          
+          // this.world.network.saveSettings(); // Save any corrections made to settings
+
+          // Listen for provider changes in settings
+          this.world.settings.on('change', changes => {
+            if (changes.llmProvider && changes.llmProvider.value) {
+              const newProviderId = changes.llmProvider.value;
+              const providerDetail = availableProvidersListFromSettings.find(p => p.id === newProviderId);
+
+              if (providerDetail && successfullyRegisteredProviderIds.includes(newProviderId)) {
+                try {
+                  this.llmManager.selectProvider(newProviderId);
+                  debugLog(`[AIServer] Switched LLM provider to ${newProviderId}`);
+
+                  const currentModel = this.world.settings.llmModel;
+                  if (!currentModel || !providerDetail.availableModels.includes(currentModel)) {
+                    const newDefaultModel = providerDetail.defaultModel;
+                    this.world.settings.set('llmModel', newDefaultModel, true);
+                    debugLog(`[AIServer] Updated model to ${newDefaultModel} for new provider`);
+                  }
+                } catch (e) {
+                  console.warn(`[AIServer] Failed to switch to LLM provider: ${newProviderId}`, e);
+                  // Attempt to revert to a known good state if switch fails
+                  if(successfullyRegisteredProviderIds.length > 0) {
+                      const fallbackProviderId = successfullyRegisteredProviderIds[0];
+                      const fallbackProviderDetail = availableProvidersListFromSettings.find(p => p.id === fallbackProviderId);
+                      this.world.settings.set('llmProvider', fallbackProviderId, true);
+                      if (fallbackProviderDetail) {
+                           this.world.settings.set('llmModel', fallbackProviderDetail.defaultModel, true);
+                           this.llmManager.selectProvider(fallbackProviderId); // also select it in llmManager
+                      } else {
+                           this.world.settings.set('llmModel', null, true);
+                      }
+                  } else {
+                      this.world.settings.set('llmProvider', null, true);
+                      this.world.settings.set('llmModel', null, true);
+                  }
+                }
+              } else {
+                console.warn(`[AIServer] Tried to switch to unavailable/unregistered LLM provider: ${newProviderId}`);
+                // Revert to a known good provider or clear settings
+                if(successfullyRegisteredProviderIds.length > 0) {
+                    const fallbackProviderId = successfullyRegisteredProviderIds[0];
+                    const fallbackProviderDetail = availableProvidersListFromSettings.find(p => p.id === fallbackProviderId);
+                    this.world.settings.set('llmProvider', fallbackProviderId, true);
+                     if (fallbackProviderDetail) {
+                         this.world.settings.set('llmModel', fallbackProviderDetail.defaultModel, true);
+                         this.llmManager.selectProvider(fallbackProviderId); // also select it in llmManager
+                    } else {
+                         this.world.settings.set('llmModel', null, true);
+                    }
+                } else {
+                    this.world.settings.set('llmProvider', null, true);
+                    this.world.settings.set('llmModel', null, true);
+                }
+              }
+            }
+
+            // Listen for model changes to update the provider config
+            if (changes.llmModel && changes.llmModel.value) {
+              const model = changes.llmModel.value;
+              const provider = this.world.settings.llmProvider;
+              if (provider && model) {
+                // This part is mostly for logging, actual model selection happens with provider selection
+                // or when model is corrected for a new provider.
+                debugLog(`[AIServer] LLM model changed to ${model} for provider ${provider}`);
+              }
+            }
+          });
+        } else { // if (!this.llmManager || !this.llmManager.registerProvider)
+            debugLog('[AIServer] LLMManager or registerProvider not available.');
+            // Settings constructor already handles llmProviders being empty if no ENV keys.
+            // Ensure provider and model are null if no manager.
+            this.world.settings.set('llmProvider', null, true);
+            this.world.settings.set('llmModel', null, true);
+            // this.world.network.saveSettings();
         }
-      } else {
+      } else { // if (!mcp) ...
         debugLog('[MCP] No MCP server provided')
       }
 
