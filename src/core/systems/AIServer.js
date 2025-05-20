@@ -29,16 +29,16 @@ export class AIServer extends System {
     this.activeStreams = new Map() // Track active streams by player ID
   }
 
-  async init({ mcp, llmClient }) {
+  async init({ mcp, llmManager }) {
     try {
       // Use the mcp server instance if provided
       if (mcp) {
         debugLog('[MCP] Using provided MCP server')
         this.mcp = mcp
-        this.llmClient = llmClient
+        this.llmManager = llmManager
 
-        // Initialize and register providers only if llmClient is present
-        if (this.llmClient && this.llmClient.registerProvider) {
+        // Initialize and register providers only if llmManager is present
+        if (this.llmManager && this.llmManager.registerProvider) {
           const availableProviders = [];
           const defaultModels = {
             anthropic: 'claude-3-sonnet-20240229',
@@ -51,7 +51,7 @@ export class AIServer extends System {
             const anthropicProvider = new AnthropicProvider({
               apiKey: process.env.ANTHROPIC_API_KEY,
             });
-            this.llmClient.registerProvider('anthropic', anthropicProvider);
+            this.llmManager.registerProvider('anthropic', anthropicProvider);
             availableProviders.push({
               id: 'anthropic',
               label: 'Anthropic',
@@ -73,7 +73,7 @@ export class AIServer extends System {
             const openaiProvider = new OpenAIProvider({
               apiKey: process.env.OPENAI_API_KEY,
             });
-            this.llmClient.registerProvider('openai', openaiProvider);
+            this.llmManager.registerProvider('openai', openaiProvider);
             availableProviders.push({
               id: 'openai',
               label: 'OpenAI',
@@ -97,7 +97,7 @@ export class AIServer extends System {
               siteUrl: 'https://hyperfy.io',
               siteName: 'Hyperfy'
             });
-            this.llmClient.registerProvider('openrouter', openRouterProvider);
+            this.llmManager.registerProvider('openrouter', openRouterProvider);
             availableProviders.push({
               id: 'openrouter',
               label: 'OpenRouter',
@@ -127,7 +127,7 @@ export class AIServer extends System {
               ? settingsProvider
               : availableProviders[0].id;
 
-            this.llmClient.selectProvider(initialProvider);
+            this.llmManager.selectProvider(initialProvider);
             debugLog(`[AIServer] Using ${initialProvider} as initial provider`);
 
             // Set the initial model if not already set
@@ -154,7 +154,7 @@ export class AIServer extends System {
                 const newProvider = changes.llmProvider.value;
                 if (availableProviders.some(p => p.id === newProvider)) {
                   try {
-                    this.llmClient.selectProvider(newProvider);
+                    this.llmManager.selectProvider(newProvider);
                     debugLog(`[AIServer] Switched LLM provider to ${newProvider}`);
 
                     // When provider changes, check if we need to update the model
@@ -212,8 +212,8 @@ export class AIServer extends System {
 
         debugLog('[MCP] Server initialized successfully')
 
-        if (this.llmClient) {
-          this.llmClient.connectToServer(`http://localhost:${process.env.PORT}/sse`)
+        if (this.llmManager) {
+          this.llmManager.connectToServer(`http://localhost:${process.env.PORT}/sse`)
         }
       }
     } catch (err) {
@@ -229,20 +229,20 @@ export class AIServer extends System {
         prompt: async (entity, { query, userId }) => {
           // Check scripting rules (optional, can be expanded)
           if (!query) throw new Error('Missing query for prompt')
-          if (!this.llmClient) throw new Error('No LLM client available')
+          if (!this.llmManager) throw new Error('No LLM client available')
           // Optionally, fetch scripting rules here if needed
           // Use the current provider
           const providerKey = this.world.settings.llmProvider || 'openai';
           const model = this.world.settings.llmModel;
 
           try {
-            this.llmClient.selectProvider(providerKey);
+            this.llmManager.selectProvider(providerKey);
             debugLog(`[AIServer] App prompt using provider '${providerKey}'${model ? ` and model '${model}'` : ''}`);
           } catch (e) {
             throw new Error(`Unknown LLM provider: ${providerKey}`)
           }
           // Start a fresh prompt loop and return the full result
-          return await this.llmClient.processQueryStream(query, userId, undefined, entity.data.id) // ,providerKey, model
+          return await this.llmManager.processQueryStream(query, userId, undefined, entity.data.id) // ,providerKey, model
         }
       },
       get tools() {
@@ -355,7 +355,7 @@ export class AIServer extends System {
       return false
     }
 
-    if (!this.llmClient) {
+    if (!this.llmManager) {
       console.error('[LLM] No LLM client available')
       this.world.network.sendTo(player.data.id, 'llmEvent', {
         type: 'error',
@@ -375,7 +375,7 @@ export class AIServer extends System {
     const model = this.world.settings.llmModel;
 
     try {
-      this.llmClient.selectProvider(providerKey);
+      this.llmManager.selectProvider(providerKey);
       debugLog(`Selected LLM provider '${providerKey}' for this prompt.`);
 
       if (model) {
@@ -458,7 +458,7 @@ export class AIServer extends System {
           this.activeStreams.delete(userId)
 
           // Remove all event listeners
-          this.removeEventListeners(this.llmClient, eventHandlers)
+          this.removeEventListeners(this.llmManager, eventHandlers)
         }
       },
 
@@ -470,20 +470,20 @@ export class AIServer extends System {
           this.activeStreams.delete(userId)
 
           // Remove all event listeners
-          this.removeEventListeners(this.llmClient, eventHandlers)
+          this.removeEventListeners(this.llmManager, eventHandlers)
         }
       }
     }
 
     // Add all event listeners
-    this.llmClient.on('start', eventHandlers.onStart)
-    this.llmClient.on('status', eventHandlers.onStatus)
-    this.llmClient.on('text', eventHandlers.onText)
-    this.llmClient.on('tool_start', eventHandlers.onToolStart)
-    this.llmClient.on('tool_result', eventHandlers.onToolResult)
-    this.llmClient.on('tool_error', eventHandlers.onToolError)
-    this.llmClient.on('complete', eventHandlers.onComplete)
-    this.llmClient.on('error', eventHandlers.onError)
+    this.llmManager.on('start', eventHandlers.onStart)
+    this.llmManager.on('status', eventHandlers.onStatus)
+    this.llmManager.on('text', eventHandlers.onText)
+    this.llmManager.on('tool_start', eventHandlers.onToolStart)
+    this.llmManager.on('tool_result', eventHandlers.onToolResult)
+    this.llmManager.on('tool_error', eventHandlers.onToolError)
+    this.llmManager.on('complete', eventHandlers.onComplete)
+    this.llmManager.on('error', eventHandlers.onError)
 
     try {
       // Process the query
@@ -497,7 +497,7 @@ export class AIServer extends System {
       })
 
       // Start processing the query with the specified model if available
-      await this.llmClient.processQueryStream(query, userId, undefined, undefined, continueConversation);
+      await this.llmManager.processQueryStream(query, userId, undefined, undefined, continueConversation);
       return true
     } catch (error) {
       console.error(`[LLM] Error processing query stream for ${userId}:`, error)
@@ -513,7 +513,7 @@ export class AIServer extends System {
 
       // Clean up
       this.activeStreams.delete(userId)
-      this.removeEventListeners(this.llmClient, eventHandlers)
+      this.removeEventListeners(this.llmManager, eventHandlers)
       return false
     }
   }

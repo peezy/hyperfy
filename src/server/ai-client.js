@@ -12,7 +12,7 @@ const debugLog = (message, ...args) => {
   }
 } 
 
-export class AIClient extends EventEmitter {
+export class LLMManager extends EventEmitter {
   mcp;
   providers = {};
   selectedProvider;

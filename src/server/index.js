@@ -20,12 +20,12 @@ import { initCollections } from './collections'
 
 // Import MCP dependencies
 import { fileURLToPath } from 'url'
-import { AIClient } from './ai-client.js'
+import { LLMManager } from './ai-client.js'
 import { readJWT } from '../core/utils-server'
 import { fastifyMCPSSE } from './mcp-fastify-plugin.js'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
-const llmClient = new AIClient()
+const llmManager = new LLMManager()
 
 // Get current file's directory (ESM equivalent of __dirname)
 const __filename = fileURLToPath(import.meta.url)
@@ -69,7 +69,7 @@ const mcp = new McpServer({
 })
 
 // Initialize world with all dependencies including MCP
-world.init({ db, storage, assetsDir, mcp, llmClient })
+world.init({ db, storage, assetsDir, mcp, llmManager })
 
 // Create an auth handler function to validate tokens and return player IDs
 const authHandler = async authToken => {
