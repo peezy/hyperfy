@@ -94,7 +94,7 @@ export function CoreUI({ world }) {
       {!ui.reticleSuppressors && <Reticle world={world} />}
       {<Toast world={world} />}
       {ready && <ActionsBlock world={world} />}
-      {ready && <Sidebar world={world} ui={ui} />}
+      {/* {ready && <Sidebar world={world} ui={ui} />} */}
       {ready && <Chat world={world} />}
       {/* {ready && <Side world={world} player={player} menu={menu} />} */}
       {/* {ready && menu?.type === 'app' && code && (
@@ -106,7 +106,7 @@ export function CoreUI({ world }) {
       {kicked && <KickedOverlay code={kicked} />}
       {ready && isTouch && <TouchBtns world={world} />}
       <div id='core-ui-portal' />
-      {ready && <Wallet world={world} />}
+      {ready && <Wallet world={world} ui={ui} />}
     </div>
   )
 }
