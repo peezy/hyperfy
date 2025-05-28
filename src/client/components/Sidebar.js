@@ -24,6 +24,7 @@ import {
   SquareMenuIcon,
   TagIcon,
   Trash2Icon,
+  ArrowLeftRightIcon,
 } from 'lucide-react'
 import { cls } from './cls'
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
@@ -54,9 +55,10 @@ import { DEG2RAD, RAD2DEG } from '../../core/extras/general'
 import * as THREE from '../../core/extras/three'
 import { isTouch } from '../utils'
 import { uuid } from '../../core/utils'
+import { SwapModal } from './swapModal'
 
 const mainSectionPanes = ['prefs']
-const worldSectionPanes = ['world', 'docs', 'apps', 'add']
+const worldSectionPanes = ['world', 'docs', 'apps', 'add', 'swap']
 const appSectionPanes = ['app', 'script', 'nodes', 'meta']
 
 const e1 = new THREE.Euler(0, 0, 0, 'YXZ')
@@ -185,6 +187,13 @@ export function Sidebar({ world, ui }) {
               >
                 <CirclePlusIcon size='1.25rem' />
               </Btn>
+              <Btn
+                active={activePane === 'swap'}
+                suspended={ui.pane === 'swap' && !activePane}
+                onClick={() => world.ui.togglePane('swap')}
+              >
+                <ArrowLeftRightIcon size='1.25rem' />
+              </Btn>
             </Section>
           )}
           {ui.app && (
@@ -221,6 +230,7 @@ export function Sidebar({ world, ui }) {
           )}
         </div>
         {ui.pane === 'prefs' && <Prefs world={world} hidden={!ui.active} />}
+        {ui.pane === 'swap' && <Swap world={world} hidden={!ui.active} />}
         {ui.pane === 'world' && <World world={world} hidden={!ui.active} />}
         {ui.pane === 'apps' && <Apps world={world} hidden={!ui.active} />}
         {ui.pane === 'add' && <Add world={world} hidden={!ui.active} />}
@@ -410,6 +420,50 @@ const shadowOptions = [
   { label: 'Med', value: 'med' },
   { label: 'High', value: 'high' },
 ]
+
+function Swap({ world, hidden }) {
+  return (
+    <Pane hidden={hidden}>
+      <div
+        className='swap'
+        css={css`
+          background: rgba(11, 10, 21, 0.85);
+          border: 0.0625rem solid #2a2b39;
+          backdrop-filter: blur(5px);
+          border-radius: 1rem;
+          display: flex;
+          flex-direction: column;
+          min-height: 12rem;
+          .swap-head {
+            height: 3.125rem;
+            padding: 0 1rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            display: flex;
+            align-items: center;
+          }
+          .swap-title {
+            font-weight: 500;
+            font-size: 1rem;
+            line-height: 1;
+          }
+          .swap-content {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+          }
+        `}
+      >
+        <div className='swap-head'>
+          <div className='swap-title'>Swap</div>
+        </div>
+        <div className='swap-content noscrollbar'>
+          <SwapModal />
+        </div>
+      </div>
+    </Pane>
+  )
+}
+
 function Prefs({ world, hidden }) {
   const player = world.entities.player
   const { isAdmin, isBuilder } = usePermissions(world)

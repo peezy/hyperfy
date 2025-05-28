@@ -5,15 +5,17 @@ import { WalletAdapterNetwork } from '@solana/wallet-adapter-base'
 import { ConnectionProvider, useWallet, WalletProvider } from '@solana/wallet-adapter-react'
 import { useWalletModal, WalletModalProvider, WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import { PhantomWalletAdapter, SolflareWalletAdapter, UnsafeBurnerWalletAdapter } from '@solana/wallet-adapter-wallets'
+import { Sidebar } from './Sidebar'
 
-export function Wallet({ world }) {
+export function Wallet({ world, ui }) {
   const network = WalletAdapterNetwork.Mainnet
   const endpoint = useMemo(() => clusterApiUrl(network), [network])
   const wallets = useMemo(() => [new PhantomWalletAdapter(), new SolflareWalletAdapter()], [network])
   return (
-    <ConnectionProvider endpoint={endpoint}>
+    <ConnectionProvider endpoint={'https://mainnet.helius-rpc.com/?api-key=eda8f8ca-89fa-4ebb-8b6b-57c9d9135d20'}>
       <WalletProvider wallets={wallets} autoConnect>
         <WalletModalProvider>
+          <Sidebar world={world} ui={ui} />
           <Styles />
           <Logic world={world} />
         </WalletModalProvider>
