@@ -57,8 +57,8 @@ import { isTouch } from '../utils'
 import { uuid } from '../../core/utils'
 import { SwapModal } from './swapModal'
 
-const mainSectionPanes = ['prefs']
-const worldSectionPanes = ['world', 'docs', 'apps', 'add', 'swap']
+const mainSectionPanes = ['prefs', 'swap']
+const worldSectionPanes = ['world', 'docs', 'apps', 'add']
 const appSectionPanes = ['app', 'script', 'nodes', 'meta']
 
 const e1 = new THREE.Euler(0, 0, 0, 'YXZ')
@@ -124,6 +124,13 @@ export function Sidebar({ world, ui }) {
             >
               <MenuIcon size='1.25rem' />
             </Btn>
+            <Btn
+              active={activePane === 'swap'}
+              suspended={ui.pane === 'swap' && !activePane}
+              onClick={() => world.ui.togglePane('swap')}
+            >
+              <ArrowLeftRightIcon size='1.25rem' />
+            </Btn>
             {isTouch && (
               <Btn
                 onClick={() => {
@@ -186,13 +193,6 @@ export function Sidebar({ world, ui }) {
                 onClick={() => world.ui.togglePane('add')}
               >
                 <CirclePlusIcon size='1.25rem' />
-              </Btn>
-              <Btn
-                active={activePane === 'swap'}
-                suspended={ui.pane === 'swap' && !activePane}
-                onClick={() => world.ui.togglePane('swap')}
-              >
-                <ArrowLeftRightIcon size='1.25rem' />
               </Btn>
             </Section>
           )}
