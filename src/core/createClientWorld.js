@@ -22,6 +22,7 @@ import { Particles } from './systems/Particles'
 import { Snaps } from './systems/Snaps'
 import { Wind } from './systems/Wind'
 import { XR } from './systems/XR'
+import { AIClient } from './systems/AIClient'
 
 export function createClientWorld() {
   const world = new World()
@@ -47,5 +48,6 @@ export function createClientWorld() {
   world.register('snaps', Snaps)
   world.register('wind', Wind)
   world.register('xr', XR)
+  world.register('ai', AIClient)
   return world
 }

@@ -28,6 +28,9 @@ const names = [
   'depositResponse',
   'withdrawRequest',
   'withdrawResponse',
+  'aiProcessQuery',
+  'aiCancelStream',
+  'llmEvent',
 ]
 
 const byName = {}
