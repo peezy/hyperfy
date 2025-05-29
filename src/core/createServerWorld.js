@@ -8,6 +8,7 @@ import { ServerLoader } from './systems/ServerLoader'
 import { ServerEnvironment } from './systems/ServerEnvironment'
 import { ServerMonitor } from './systems/ServerMonitor'
 import { AIServer } from './systems/AIServer'
+import { AssetWatcher } from './systems/AssetWatcher'
 
 export function createServerWorld() {
   const world = new World()
@@ -19,5 +20,6 @@ export function createServerWorld() {
   world.register('environment', ServerEnvironment)
   world.register('monitor', ServerMonitor)
   world.register('ai', AIServer)
+  world.register('assetWatcher', AssetWatcher)
   return world
 }
