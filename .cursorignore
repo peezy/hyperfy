@@ -1,5 +1,4 @@
 
-/world*
 node_modules/*
 .git/*
 .cursorignore
