@@ -1,6 +1,6 @@
 {
-  "name": "@drama-haus/hyperfy",
-  "version": "0.15.0",
+  "name": "@drama.haus/hyperfy",
+  "version": "0.15.1",
   "type": "module",
   "main": "index.node.js",
   "types": "index.d.ts",
