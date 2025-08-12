@@ -1,9 +1,17 @@
 {
   "name": "@drama.haus/hyperfy",
-  "version": "0.15.2",
+  "version": "0.15.3",
   "type": "module",
   "main": "index.node.js",
   "types": "index.d.ts",
+  "files": [
+    "build/**",
+    "index.node.js",
+    "index.d.ts",
+    "types/**",
+    "README.md",
+    "LICENSE"
+  ],
   "exports": {
     ".": {
       "import": "./index.node.js",
