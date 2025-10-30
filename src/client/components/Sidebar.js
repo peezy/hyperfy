@@ -64,10 +64,13 @@ import { isTouch } from '../utils'
 import { uuid } from '../../core/utils'
 import { useRank } from './useRank'
 import { Ranks } from '../../core/extras/ranks'
+import { ModSidebarButtons, ModSidebarPanes } from '../../../mods/.gen/ModSidebar'
 
 const mainSectionPanes = ['prefs']
 const worldSectionPanes = ['world', 'docs', 'apps', 'add']
 const appSectionPanes = ['app', 'script', 'nodes', 'meta']
+// Create array of mod pane ids
+const modSectionPanes = Object.keys(ModSidebarPanes).map(id => `mod-${id}`)
 
 const e1 = new THREE.Euler(0, 0, 0, 'YXZ')
 const q1 = new THREE.Quaternion()
@@ -241,6 +244,21 @@ export function Sidebar({ world, ui }) {
               </Btn>
             </Section>
           )}
+          {/* Only render mod section if there are any mod buttons */}
+          {Object.keys(ModSidebarButtons).length > 0 && (
+            <Section active={modSectionPanes.includes(activePane)} top>
+              {Object.entries(ModSidebarButtons).map(([id, Button]) => (
+                <Btn
+                  key={id}
+                  active={activePane === `mod-${id}`}
+                  suspended={ui.pane === `mod-${id}` && !activePane}
+                  onClick={() => world.ui.togglePane(`mod-${id}`)}
+                >
+                  <Button world={world} />
+                </Btn>
+              ))}
+            </Section>
+          )}
         </div>
         {ui.pane === 'prefs' && <Prefs world={world} hidden={!ui.active} />}
         {ui.pane === 'world' && <World world={world} hidden={!ui.active} />}
@@ -251,6 +269,10 @@ export function Sidebar({ world, ui }) {
         {ui.pane === 'nodes' && <Nodes key={ui.app.data.id} world={world} hidden={!ui.active} />}
         {ui.pane === 'meta' && <Meta key={ui.app.data.id} world={world} hidden={!ui.active} />}
         {ui.pane === 'players' && <Players world={world} hidden={!ui.active} />}
+        {/* Render mod panes */}
+        {Object.entries(ModSidebarPanes).map(([id, Pane]) => (
+          ui.pane === `mod-${id}` && <Pane key={id} world={world} hidden={!ui.active} />
+        ))}
       </div>
     </HintProvider>
   )
@@ -1902,3 +1924,6 @@ function Players({ world, hidden }) {
     </Pane>
   )
 }
+
+// Export these components so they can be reused by mods
+export { Section, Btn, Content, Pane, Hint, Group }

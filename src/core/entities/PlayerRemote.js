@@ -21,6 +21,12 @@ export class PlayerRemote extends Entity {
     super(world, data, local)
     this.isPlayer = true
     this.isRemote = true
+    
+    // Initialize custom data if it doesn't exist
+    if (!this.data.custom) {
+      this.data.custom = {}
+    }
+    
     this.init()
   }
 
@@ -232,6 +238,41 @@ export class PlayerRemote extends Entity {
     if (data.hasOwnProperty('rank')) {
       this.data.rank = data.rank
       this.world.emit('rank', { playerId: this.data.id, rank: this.data.rank })
+    }
+    if (data.hasOwnProperty('custom')) {
+      // Initialize if needed
+      if (!this.data.custom) {
+        this.data.custom = {}
+      }
+      
+      // Merge custom properties instead of replacing the entire object
+      if (typeof data.custom === 'object' && data.custom !== null) {
+        for (const key in data.custom) {
+          const value = data.custom[key]
+          this.data.custom[key] = value
+          // Emit event for each property change
+          this.world.events.emit(`custom:${key}`, { 
+            playerId: this.data.id, 
+            key, 
+            value 
+          })
+        }
+      }
+    }
+    // Handle individual custom property modifications
+    else if (data.hasOwnProperty('customProp')) {
+      // Initialize if needed
+      if (!this.data.custom) {
+        this.data.custom = {}
+      }
+      
+      const { key, value } = data.customProp
+      this.data.custom[key] = value
+      this.world.events.emit(`custom:${key}`, { 
+        playerId: this.data.id, 
+        key, 
+        value 
+      })
     }
     if (avatarChanged) {
       this.applyAvatar()

@@ -11,7 +11,9 @@ export function createPlayerProxy(entity, player) {
   const quaternion = new THREE.Quaternion()
   let activeEffectConfig = null
   let voiceMod
-  return {
+  
+  // Create the base player proxy
+  const proxy = {
     get networkId() {
       return player.data.owner
     },
@@ -194,4 +196,30 @@ export function createPlayerProxy(entity, player) {
       }
     },
   }
+  
+  // Add injected player methods and properties if available
+  if (world.apps) {
+    // Add getters
+    for (const key in world.apps.playerGetters) {
+      Object.defineProperty(proxy, key, {
+        get: () => world.apps.playerGetters[key](player),
+        enumerable: true,
+      })
+    }
+    
+    // Add setters
+    for (const key in world.apps.playerSetters) {
+      Object.defineProperty(proxy, key, {
+        set: (value) => world.apps.playerSetters[key](player, value),
+        enumerable: true,
+      })
+    }
+    
+    // Add methods
+    for (const key in world.apps.playerMethods) {
+      proxy[key] = (...args) => world.apps.playerMethods[key](entity, player, ...args)
+    }
+  }
+  
+  return proxy
 }

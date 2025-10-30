@@ -1,32 +1,10 @@
 import { Packr } from 'msgpackr'
+import { allPackets } from './.gen/generated-packets.js'
 
 const packr = new Packr({ structuredClone: true })
 
-// prettier-ignore
-const names = [
-  'snapshot',
-  'command',
-  'chatAdded',
-  'chatCleared',
-  'blueprintAdded',
-  'blueprintModified',
-  'entityAdded',
-  'entityModified',
-  'entityEvent',
-  'entityRemoved',
-  'playerTeleport',
-  'playerPush',
-  'playerSessionAvatar',
-  'liveKitLevel',
-  'mute',
-  'settingsModified',
-  'spawnModified',
-  'modifyRank',
-  'kick',
-  'ai',
-  'ping',
-  'pong',
-]
+// Use the combined list of packets from the generated file
+const names = allPackets
 
 const byName = {}
 const byId = {}

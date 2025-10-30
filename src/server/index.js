@@ -60,8 +60,6 @@ if (process.env.ASSETS === 's3' && !process.env.ASSETS_S3_URI) {
   throw new Error(`[envs] ASSETS_S3_URI must be set when using ASSETS=s3`)
 }
 
-const fastify = Fastify({ logger: { level: 'error' } })
-
 // create world folder if needed
 await fs.ensureDir(worldDir)
 
@@ -81,7 +79,10 @@ await cleaner.init({ db })
 const storage = new Storage(path.join(worldDir, '/storage.json'))
 
 // create world
-const world = createServerWorld()
+const world = await createServerWorld()
+// world.assetsUrl = process.env.PUBLIC_ASSETS_URL
+// world.collections.deserialize(collections)
+// world.init({ db, storage, assetsDir })
 await world.init({
   assetsDir: assets.dir,
   assetsUrl: assets.url,
@@ -90,6 +91,8 @@ await world.init({
   storage,
   collections: collections.list,
 })
+
+const fastify = Fastify({ logger: { level: 'error' } })
 
 fastify.register(cors)
 fastify.register(compress)
