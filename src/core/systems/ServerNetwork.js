@@ -16,6 +16,20 @@ const HEALTH_MAX = 100
 const PUBLIC_ADMIN_URL =
   process.env.PUBLIC_ADMIN_URL || (process.env.PUBLIC_API_URL || '').replace(/\/api\/?$/, '')
 
+function serializePlayerForAdmin(player) {
+  if (!player?.data) return null
+  return {
+    id: player.data.id,
+    name: player.data.name,
+    avatar: player.data.avatar,
+    sessionAvatar: player.data.sessionAvatar,
+    position: player.data.position,
+    quaternion: player.data.quaternion,
+    rank: player.data.rank,
+    enteredAt: player.data.enteredAt,
+  }
+}
+
 /**
  * Server Network System
  *
@@ -302,6 +316,10 @@ export class ServerNetwork extends System {
       // enter events on the server are sent after the snapshot.
       // on the client these are sent during PlayerRemote.js entity instantiation!
       this.world.events.emit('enter', { playerId: socket.player.data.id })
+      const joined = serializePlayerForAdmin(socket.player)
+      if (joined) {
+        this.emit('playerJoined', joined)
+      }
     } catch (err) {
       console.error(err)
     }
@@ -415,6 +433,7 @@ export class ServerNetwork extends System {
     if (!player || !player.isPlayer) return { ok: false, error: 'not_found' }
     player.modify({ rank })
     this.send('entityModified', { id: playerId, rank })
+    this.emit('entityModified', { id: playerId, rank })
     await this.db('users').where('id', playerId).update({ rank })
     return { ok: true }
   }
@@ -442,6 +461,7 @@ export class ServerNetwork extends System {
     this.world.blueprints.add(blueprint)
     this.send('blueprintAdded', blueprint, ignoreNetworkId)
     this.dirtyBlueprints.add(blueprint.id)
+    this.emit('blueprintAdded', blueprint)
     return { ok: true }
   }
 
@@ -455,6 +475,10 @@ export class ServerNetwork extends System {
       this.world.blueprints.modify(change)
       this.send('blueprintModified', change, ignoreNetworkId)
       this.dirtyBlueprints.add(change.id)
+      const updated = this.world.blueprints.get(change.id)
+      if (updated) {
+        this.emit('blueprintModified', updated)
+      }
       return { ok: true }
     }
     // otherwise, send a revert back to client, because someone else modified before them
@@ -469,6 +493,9 @@ export class ServerNetwork extends System {
     this.send('entityAdded', data, ignoreNetworkId)
     if (entity?.isApp) {
       this.dirtyApps.add(entity.data.id)
+    }
+    if (entity) {
+      this.emit('entityAdded', entity.data)
     }
     return { ok: true }
   }
@@ -495,7 +522,32 @@ export class ServerNetwork extends System {
       if (changed) {
         await this.db('users').where('id', entity.data.userId).update(changes)
       }
+      const playerUpdate = {
+        id: entity.data.id,
+      }
+      let hasPlayerUpdate
+      if (data.hasOwnProperty('p')) {
+        playerUpdate.position = entity.data.position
+        hasPlayerUpdate = true
+      }
+      if (data.hasOwnProperty('q')) {
+        playerUpdate.quaternion = entity.data.quaternion
+        hasPlayerUpdate = true
+      }
+      if (data.hasOwnProperty('name')) {
+        playerUpdate.name = entity.data.name
+        hasPlayerUpdate = true
+      }
+      if (data.hasOwnProperty('avatar') || data.hasOwnProperty('sessionAvatar')) {
+        playerUpdate.avatar = entity.data.avatar
+        playerUpdate.sessionAvatar = entity.data.sessionAvatar
+        hasPlayerUpdate = true
+      }
+      if (hasPlayerUpdate) {
+        this.emit('playerUpdated', playerUpdate)
+      }
     }
+    this.emit('entityModified', entity.data)
     return { ok: true }
   }
 
@@ -506,12 +558,14 @@ export class ServerNetwork extends System {
     if (entity?.isApp) {
       this.dirtyApps.add(id)
     }
+    this.emit('entityRemoved', id)
     return { ok: true }
   }
 
   applySettingsModified(data, { ignoreNetworkId } = {}) {
     this.world.settings.set(data.key, data.value)
     this.send('settingsModified', data, ignoreNetworkId)
+    this.emit('settingsModified', data)
     return { ok: true }
   }
 
@@ -535,6 +589,7 @@ export class ServerNetwork extends System {
       .merge({
         value,
       })
+    this.emit('spawnModified', this.spawn)
     return { ok: true }
   }
 
@@ -610,5 +665,9 @@ export class ServerNetwork extends System {
     this.world.livekit.clearModifiers(socket.id)
     socket.player.destroy(true)
     this.sockets.delete(socket.id)
+    const playerId = socket.player?.data?.id
+    if (playerId) {
+      this.emit('playerLeft', { id: playerId })
+    }
   }
 }
